@@ -12,12 +12,19 @@ interface InstanciaSelecionada {
   token: string;
 }
 
+interface MidiaVariacao {
+  url: string;
+  tipo: string;
+  nome: string;
+}
+
 interface Campanha {
   id: string;
   usuario_id: string;
   nome: string;
   mensagem: string;
   mensagens_variacoes: string[];
+  midias_variacoes: MidiaVariacao[];
   instancias_selecionadas: InstanciaSelecionada[];
   instancia_token: string | null;
   horario_inicio: string;
@@ -147,22 +154,19 @@ async function processarContato(
   const mensagemBase = selecionarMensagem(campanha);
   const mensagemFinal = aplicarVariaveis(mensagemBase, contato);
 
-  // Envia mídia se houver
-  if (campanha.midia_url && campanha.midia_tipo) {
-    const midiaOk = await enviarMidia(
-      jid,
-      campanha.midia_url,
-      campanha.midia_tipo,
-      campanha.midia_nome ?? 'arquivo',
-      mensagemFinal,
-      instancia.token,
-    );
+  // Seleciona mídia aleatória (midias_variacoes tem prioridade; fallback para midia_url legado)
+  const todasMidias: MidiaVariacao[] = campanha.midias_variacoes?.length > 0
+    ? campanha.midias_variacoes
+    : (campanha.midia_url && campanha.midia_tipo)
+    ? [{ url: campanha.midia_url, tipo: campanha.midia_tipo, nome: campanha.midia_nome ?? 'arquivo' }]
+    : [];
+  const midia = todasMidias.length > 0 ? escolherAleatorio(todasMidias) : null;
 
-    // Se a mídia tem legenda embutida, só envia texto se a mídia falhou
+  if (midia) {
+    const midiaOk = await enviarMidia(jid, midia.url, midia.tipo, midia.nome, mensagemFinal, instancia.token);
     if (!midiaOk) {
       await enviarTexto(jid, mensagemFinal, instancia.token);
     } else if (campanha.delay_mensagens > 0) {
-      // Aguarda o intervalo entre mídia e mensagem de texto
       await new Promise((r) => setTimeout(r, campanha.delay_mensagens * 1000));
       await enviarTexto(jid, mensagemFinal, instancia.token);
     }
@@ -319,6 +323,8 @@ export async function processarDisparo(): Promise<{ processadas: number; erros: 
         (c.instancias_selecionadas as unknown as InstanciaSelecionada[]) ?? [];
       campanha.mensagens_variacoes =
         (c.mensagens_variacoes as unknown as string[]) ?? [];
+      campanha.midias_variacoes =
+        (c.midias_variacoes as unknown as MidiaVariacao[]) ?? [];
 
       await processarCampanha(campanha);
       processadas++;

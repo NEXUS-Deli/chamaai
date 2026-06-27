@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  Loader2, ChevronRight, UploadCloud, X, Plus, Trash2,
+  Loader2, ChevronRight, UploadCloud, X, Plus, Trash2, FileText,
 } from "lucide-react";
 import { isValidPhone, toE164BR } from "@/lib/phone";
 import { parseCSV } from "@/lib/csv";
@@ -23,14 +23,44 @@ export const Route = createFileRoute("/_authenticated/campanhas/nova")({
 interface Contato { telefone: string; nome: string; empresa: string }
 interface Instancia { id: string; nome: string; instancia: string; token: string | null }
 
+function MidiaThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const url = URL.createObjectURL(file);
+  return (
+    <div className="relative group w-20 h-20 rounded-md border bg-muted overflow-hidden flex-shrink-0">
+      {file.type.startsWith("image/") ? (
+        <Dialog>
+          <DialogTrigger asChild>
+            <img src={url} alt={file.name} className="w-full h-full object-cover cursor-pointer" />
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl border-none bg-transparent shadow-none p-0 flex justify-center">
+            <img src={url} alt={file.name} className="max-h-[85vh] rounded-lg object-contain" />
+          </DialogContent>
+        </Dialog>
+      ) : file.type.startsWith("video/") ? (
+        <video src={url} className="w-full h-full object-cover" muted />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
+          <FileText className="w-6 h-6 text-muted-foreground" />
+          <span className="text-[10px] text-muted-foreground text-center leading-tight line-clamp-2">{file.name}</span>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
 function NovaCampanha() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [nome, setNome] = useState("");
 
-  // Mensagem única (fallback quando não há variações)
   const [mensagem, setMensagem] = useState("");
-  // Variações de mensagem para sorteio
   const [mensagensVariacoes, setMensagensVariacoes] = useState<string[]>([]);
 
   const [delayMinimo, setDelayMinimo] = useState(5);
@@ -39,11 +69,12 @@ function NovaCampanha() {
   const [horarioInicio, setHorarioInicio] = useState("08:00");
   const [horarioFim, setHorarioFim] = useState("22:00");
 
-  // Múltiplas instâncias
   const [instancias, setInstancias] = useState<Instancia[]>([]);
   const [instanciasSelecionadas, setInstanciasSelecionadas] = useState<string[]>([]);
 
-  const [midiaFile, setMidiaFile] = useState<File | null>(null);
+  // Variações de mídia — até 10 arquivos
+  const [midiasFiles, setMidiasFiles] = useState<File[]>([]);
+
   const [agendarPara, setAgendarPara] = useState("");
 
   const [pastas, setPastas] = useState<{ id: string; nome: string }[]>([]);
@@ -110,16 +141,20 @@ function NovaCampanha() {
     return leadsDaPasta.filter((l) => leadsSelSet.has(l.telefone));
   };
 
-  const uploadMidia = async () => {
-    if (!midiaFile) return null;
+  const uploadMidias = async (): Promise<{ url: string; nome: string; tipo: string }[]> => {
+    if (midiasFiles.length === 0) return [];
     const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return null;
-    const ext = midiaFile.name.split(".").pop();
-    const fileName = `${u.user.id}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("midias").upload(fileName, midiaFile);
-    if (error) { toast.error("Erro ao enviar mídia: " + error.message); return null; }
-    const { data: urlData } = supabase.storage.from("midias").getPublicUrl(fileName);
-    return { url: urlData.publicUrl, name: midiaFile.name, type: midiaFile.type, path: fileName, bucket: "midias" };
+    if (!u.user) return [];
+    const resultados: { url: string; nome: string; tipo: string }[] = [];
+    for (const file of midiasFiles) {
+      const ext = file.name.split(".").pop();
+      const fileName = `${u.user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from("midias").upload(fileName, file);
+      if (error) { toast.error("Erro ao enviar mídia: " + error.message); continue; }
+      const { data: urlData } = supabase.storage.from("midias").getPublicUrl(fileName);
+      resultados.push({ url: urlData.publicUrl, nome: file.name, tipo: file.type });
+    }
+    return resultados;
   };
 
   const formatarDataParaBRT = (dataLocal: string): string | null => {
@@ -138,6 +173,21 @@ function NovaCampanha() {
     );
   };
 
+  const adicionarMidia = (files: FileList | null) => {
+    if (!files) return;
+    setMidiasFiles((prev) => {
+      const novos = Array.from(files).filter((f) => !prev.some((p) => p.name === f.name && p.size === f.size));
+      const combinados = [...prev, ...novos];
+      if (combinados.length > 10) {
+        toast.warning("Máximo de 10 mídias por campanha.");
+        return combinados.slice(0, 10);
+      }
+      return combinados;
+    });
+  };
+
+  const removerMidia = (index: number) => setMidiasFiles((prev) => prev.filter((_, i) => i !== index));
+
   const disparar = async () => {
     if (instanciasSelecionadas.length === 0) return toast.error("Selecione ao menos uma instância de WhatsApp.");
     setLoading(true);
@@ -152,15 +202,17 @@ function NovaCampanha() {
         .map((i) => ({ id: i.id, nome: i.nome, token: i.token ?? "" }));
 
       const primeiraInstancia = instsSelecionadas[0];
-      const midiaInfo = midiaFile ? await uploadMidia() : null;
+      const midiasVariacoes = await uploadMidias();
+      const primeiraMidia = midiasVariacoes[0] ?? null;
 
-        const { data: camp, error } = await supabase
+      const { data: camp, error } = await supabase
         .from("campanhas")
         .insert({
           usuario_id: u.user.id,
           nome,
           mensagem: mensagem || (mensagensVariacoes[0] ?? ""),
           mensagens_variacoes: mensagensVariacoes.filter(Boolean) as unknown as import("@/integrations/supabase/types").Json,
+          midias_variacoes: midiasVariacoes as unknown as import("@/integrations/supabase/types").Json,
           instancias_selecionadas: instsSelecionadas as unknown as import("@/integrations/supabase/types").Json,
           instancia_whatsapp: primeiraInstancia?.id ?? null,
           instancia_nome: primeiraInstancia?.nome ?? "",
@@ -171,11 +223,11 @@ function NovaCampanha() {
           delay_segundos: delayMinimo,
           horario_inicio: horarioInicio,
           horario_fim: horarioFim,
-          midia_url: midiaInfo?.url ?? null,
-          midia_nome: midiaInfo?.name ?? null,
-          midia_tipo: midiaInfo?.type ?? null,
-          midia_path: midiaInfo?.path ?? null,
-          midia_bucket: midiaInfo?.bucket ?? null,
+          midia_url: primeiraMidia?.url ?? null,
+          midia_nome: primeiraMidia?.nome ?? null,
+          midia_tipo: primeiraMidia?.tipo ?? null,
+          midia_path: null,
+          midia_bucket: primeiraMidia ? "midias" : null,
           total_contatos: contatos.length,
           status: agendarPara ? "agendada" : "em_andamento",
           agendada_para: formatarDataParaBRT(agendarPara),
@@ -223,7 +275,7 @@ function NovaCampanha() {
               <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Prospecção Junho 2026" />
             </div>
 
-            {/* Instâncias — múltipla seleção */}
+            {/* Instâncias */}
             <div className="space-y-2">
               <Label>Instâncias do WhatsApp <span className="text-xs text-muted-foreground">(selecione uma ou mais — a mensagem sorteará entre elas)</span></Label>
               {instancias.length === 0 && (
@@ -260,7 +312,7 @@ function NovaCampanha() {
               </div>
             </div>
 
-            {/* Horário de envio */}
+            {/* Horário */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Horário início (BRT)</Label>
@@ -332,43 +384,70 @@ function NovaCampanha() {
               )}
             </div>
 
-            {/* Mídia */}
-            <div className="space-y-2">
-              <Label>Mídia (opcional)</Label>
-              <div className="flex items-center gap-2">
-                <Input type="file" accept="image/*,video/*,.pdf" onChange={(e) => setMidiaFile(e.target.files?.[0] || null)} />
-                {midiaFile && (
-                  <Button variant="ghost" size="icon" onClick={() => setMidiaFile(null)}>
-                    <X className="w-4 h-4 text-red-500" />
-                  </Button>
+            {/* Variações de mídia */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>
+                  Variações de mídia{" "}
+                  <span className="text-xs text-muted-foreground">
+                    (imagens, vídeos ou documentos — o sistema sorteia uma por envio, máx. 10)
+                  </span>
+                </Label>
+                {midiasFiles.length < 10 && (
+                  <label className="cursor-pointer">
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <span>
+                        <Plus className="w-3 h-3 mr-1" /> Adicionar mídia
+                      </span>
+                    </Button>
+                    <input
+                      type="file"
+                      accept="image/*,video/*,.pdf"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => adicionarMidia(e.target.files)}
+                    />
+                  </label>
                 )}
               </div>
-              {midiaFile && (
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <div className="w-16 h-16 bg-muted rounded-md border flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80">
-                      {midiaFile.type.startsWith("image/") ? (
-                        <img src={URL.createObjectURL(midiaFile)} alt="Prévia" className="w-full h-full object-cover" />
-                      ) : midiaFile.type.startsWith("video/") ? (
-                        <video src={URL.createObjectURL(midiaFile)} className="w-full h-full object-cover" muted />
-                      ) : (
-                        <UploadCloud className="w-6 h-6 text-muted-foreground" />
-                      )}
-                    </div>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-4xl border-none bg-transparent shadow-none p-0 flex justify-center">
-                    {midiaFile.type.startsWith("image/") ? (
-                      <img src={URL.createObjectURL(midiaFile)} alt="Prévia" className="max-h-[85vh] rounded-lg object-contain" />
-                    ) : midiaFile.type.startsWith("video/") ? (
-                      <video src={URL.createObjectURL(midiaFile)} className="max-h-[85vh] rounded-lg" controls autoPlay />
-                    ) : (
-                      <div className="bg-background p-8 rounded-lg text-center">
-                        <UploadCloud className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                        <p className="font-medium">{midiaFile.name}</p>
-                      </div>
-                    )}
-                  </DialogContent>
-                </Dialog>
+
+              {midiasFiles.length === 0 ? (
+                <label className="cursor-pointer flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-lg text-muted-foreground hover:border-primary/50 transition-colors">
+                  <UploadCloud className="w-8 h-8" />
+                  <span className="text-sm">Clique para adicionar imagens, vídeos ou documentos</span>
+                  <span className="text-xs">Sem mídia — apenas texto será enviado</span>
+                  <input
+                    type="file"
+                    accept="image/*,video/*,.pdf"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => adicionarMidia(e.target.files)}
+                  />
+                </label>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {midiasFiles.map((f, i) => (
+                    <MidiaThumb key={i} file={f} onRemove={() => removerMidia(i)} />
+                  ))}
+                  {midiasFiles.length < 10 && (
+                    <label className="cursor-pointer w-20 h-20 rounded-md border-2 border-dashed flex items-center justify-center text-muted-foreground hover:border-primary/50 transition-colors flex-shrink-0">
+                      <Plus className="w-6 h-6" />
+                      <input
+                        type="file"
+                        accept="image/*,video/*,.pdf"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => adicionarMidia(e.target.files)}
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {midiasFiles.length > 0 && (
+                <p className="text-xs text-green-600 font-medium">
+                  {midiasFiles.length} mídia(s) — o sistema sorteia qual será enviada para cada contato
+                </p>
               )}
             </div>
           </Card>
@@ -467,7 +546,17 @@ function NovaCampanha() {
             </div>
             <div className="space-y-4">
               <div><Label className="text-muted-foreground">Mensagens</Label><p>{mensagemPrincipal}</p></div>
-              <div><Label className="text-muted-foreground">Mídia</Label><p>{midiaFile ? midiaFile.name : "Nenhuma"}</p></div>
+              <div>
+                <Label className="text-muted-foreground">Mídias</Label>
+                <p>{midiasFiles.length > 0 ? `${midiasFiles.length} arquivo(s)` : "Nenhuma"}</p>
+                {midiasFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {midiasFiles.map((f, i) => (
+                      <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded truncate max-w-[140px]">{f.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="space-y-2">
                 <Label className="text-muted-foreground">Agendar para (opcional)</Label>
                 <Input type="datetime-local" value={agendarPara} onChange={(e) => setAgendarPara(e.target.value)} />

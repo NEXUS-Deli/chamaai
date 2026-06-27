@@ -60,6 +60,7 @@ export type Database = {
           instancias_selecionadas: Json | null
           mensagem: string
           mensagens_variacoes: Json | null
+          midias_variacoes: Json | null
           midia_bucket: string | null
           midia_nome: string | null
           midia_path: string | null
@@ -90,6 +91,7 @@ export type Database = {
           instancias_selecionadas?: Json | null
           mensagem: string
           mensagens_variacoes?: Json | null
+          midias_variacoes?: Json | null
           midia_bucket?: string | null
           midia_nome?: string | null
           midia_path?: string | null
@@ -120,6 +122,7 @@ export type Database = {
           instancias_selecionadas?: Json | null
           mensagem?: string
           mensagens_variacoes?: Json | null
+          midias_variacoes?: Json | null
           midia_bucket?: string | null
           midia_nome?: string | null
           midia_path?: string | null

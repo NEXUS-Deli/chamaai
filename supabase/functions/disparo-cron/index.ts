@@ -106,11 +106,13 @@ async function enviarMidia(
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface InstanciaSelecionada { id: string; nome: string; token: string }
+interface MidiaVariacao { url: string; tipo: string; nome: string }
 
 interface Campanha {
   id: string
   mensagem: string
   mensagens_variacoes: string[]
+  midias_variacoes: MidiaVariacao[]
   instancias_selecionadas: InstanciaSelecionada[]
   instancia_token: string | null
   horario_inicio: string
@@ -189,6 +191,7 @@ async function processarDisparo() {
       const campanha = c as unknown as Campanha
       campanha.instancias_selecionadas = (c.instancias_selecionadas as unknown as InstanciaSelecionada[]) ?? []
       campanha.mensagens_variacoes = (c.mensagens_variacoes as unknown as string[]) ?? []
+      campanha.midias_variacoes = (c.midias_variacoes as unknown as MidiaVariacao[]) ?? []
 
       if (!estaNoHorario(campanha.horario_inicio ?? '08:00', campanha.horario_fim ?? '22:00')) {
         continue
@@ -242,17 +245,18 @@ async function processarDisparo() {
             : campanha.mensagem
           const mensagemFinal = aplicarVariaveis(mensagemBase, contato)
 
+          // Seleciona mídia aleatória (midias_variacoes tem prioridade; fallback para midia_url legado)
+          const todasMidias: MidiaVariacao[] = campanha.midias_variacoes?.length > 0
+            ? campanha.midias_variacoes
+            : (campanha.midia_url && campanha.midia_tipo)
+            ? [{ url: campanha.midia_url, tipo: campanha.midia_tipo, nome: campanha.midia_nome ?? 'arquivo' }]
+            : []
+          const midia = todasMidias.length > 0 ? escolherAleatorio(todasMidias) : null
+
           // Envia mídia + texto ou só texto; captura messageId para rastreamento
           let mensagemId: string | null = null
-          if (campanha.midia_url && campanha.midia_tipo) {
-            mensagemId = await enviarMidia(
-              jid,
-              campanha.midia_url,
-              campanha.midia_tipo,
-              campanha.midia_nome ?? 'arquivo',
-              mensagemFinal,
-              instancia.token,
-            )
+          if (midia) {
+            mensagemId = await enviarMidia(jid, midia.url, midia.tipo, midia.nome, mensagemFinal, instancia.token)
             if (!mensagemId) {
               mensagemId = await enviarTexto(jid, mensagemFinal, instancia.token)
             } else if (campanha.delay_mensagens > 0) {

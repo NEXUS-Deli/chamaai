@@ -274,15 +274,34 @@ function Detalhes() {
         </Card>
 
         <Card className="p-5 space-y-3 text-sm">
-          <h3 className="font-semibold">Mídia enviada</h3>
-          {camp.midia_url && camp.midia_tipo && camp.midia_nome ? (
-            <MidiaPreview tipo={camp.midia_tipo} url={camp.midia_url} nome={camp.midia_nome} />
-          ) : (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <ImageIcon className="w-4 h-4" />
-              <span>Sem mídia — apenas texto</span>
-            </div>
-          )}
+          <h3 className="font-semibold">Mídias</h3>
+          {(() => {
+            const variacoes = Array.isArray(camp.midias_variacoes) && (camp.midias_variacoes as { url: string; tipo: string; nome: string }[]).length > 0
+              ? (camp.midias_variacoes as { url: string; tipo: string; nome: string }[])
+              : camp.midia_url && camp.midia_tipo && camp.midia_nome
+              ? [{ url: camp.midia_url, tipo: camp.midia_tipo, nome: camp.midia_nome }]
+              : [];
+            if (variacoes.length === 0) {
+              return (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <ImageIcon className="w-4 h-4" />
+                  <span>Sem mídia — apenas texto</span>
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-2">
+                {variacoes.length > 1 && (
+                  <p className="text-xs text-muted-foreground">{variacoes.length} variação(ões) — o sistema sorteia uma por envio</p>
+                )}
+                <div className="flex flex-wrap gap-3">
+                  {variacoes.map((m, i) => (
+                    <MidiaPreview key={i} tipo={m.tipo} url={m.url} nome={m.nome} />
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </Card>
       </div>
 
