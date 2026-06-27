@@ -10,10 +10,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, ChevronRight, UploadCloud, X } from "lucide-react";
+import {
+  Loader2, ChevronRight, UploadCloud, X, Plus, Trash2,
+} from "lucide-react";
 import { isValidPhone, toE164BR } from "@/lib/phone";
 import { parseCSV } from "@/lib/csv";
-import { dispararCampanha } from "@/lib/webhooks";
 
 export const Route = createFileRoute("/_authenticated/campanhas/nova")({
   component: NovaCampanha,
@@ -26,29 +27,29 @@ function NovaCampanha() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [nome, setNome] = useState("");
-  const [mensagem, setMensagem] = useState("Olá {nome}, tudo bem?");
-  
-  // New Delay States
+
+  // Mensagem única (fallback quando não há variações)
+  const [mensagem, setMensagem] = useState("");
+  // Variações de mensagem para sorteio
+  const [mensagensVariacoes, setMensagensVariacoes] = useState<string[]>([]);
+
   const [delayMinimo, setDelayMinimo] = useState(5);
   const [delayMaximo, setDelayMaximo] = useState(15);
   const [delayMensagens, setDelayMensagens] = useState(3);
-  
-  // Instance State
-  const [instancias, setInstancias] = useState<Instancia[]>([]);
-  const [instanciaId, setInstanciaId] = useState("");
-  
-  // Media State
-  const [midiaFile, setMidiaFile] = useState<File | null>(null);
+  const [horarioInicio, setHorarioInicio] = useState("08:00");
+  const [horarioFim, setHorarioFim] = useState("22:00");
 
+  // Múltiplas instâncias
+  const [instancias, setInstancias] = useState<Instancia[]>([]);
+  const [instanciasSelecionadas, setInstanciasSelecionadas] = useState<string[]>([]);
+
+  const [midiaFile, setMidiaFile] = useState<File | null>(null);
   const [agendarPara, setAgendarPara] = useState("");
-  
+
   const [pastas, setPastas] = useState<{ id: string; nome: string }[]>([]);
   const [pastasSel, setPastasSel] = useState<string[]>([]);
-  
-  // Leads for step 2
   const [leadsDaPasta, setLeadsDaPasta] = useState<(Contato & { id: string })[]>([]);
-  const [leadsSel, setLeadsSel] = useState<string[]>([]); // array of telefones
-  
+  const [leadsSel, setLeadsSel] = useState<string[]>([]);
   const leadsSelSet = useMemo(() => new Set(leadsSel), [leadsSel]);
 
   const [contatosCSV, setContatosCSV] = useState<Contato[]>([]);
@@ -62,13 +63,11 @@ function NovaCampanha() {
       const { data: p } = await supabase.from("pastas").select("id,nome").eq("usuario_id", u.user.id);
       setPastas(p ?? []);
       const { data: insts } = await supabase.from("instancias").select("*").eq("usuario_id", u.user.id);
-      const filteredInsts = (insts ?? []).filter(i => i.instancia !== 'r1b5f62949ba437');
+      const filteredInsts = (insts ?? []).filter((i) => i.instancia !== "r1b5f62949ba437");
       setInstancias(filteredInsts);
-      if (filteredInsts.length > 0) setInstanciaId(filteredInsts[0].id);
     })();
   }, []);
 
-  // When selected folders change, fetch their leads
   useEffect(() => {
     if (origem !== "lista" || pastasSel.length === 0) {
       setLeadsDaPasta([]);
@@ -83,14 +82,13 @@ function NovaCampanha() {
         .select("id, telefone, nome, empresa")
         .eq("usuario_id", u.user.id)
         .in("pasta_id", pastasSel);
-        
+
       const validos = (data ?? [])
-        .filter(l => isValidPhone(l.telefone))
-        .map(l => ({ id: l.id, telefone: toE164BR(l.telefone), nome: l.nome ?? "", empresa: l.empresa ?? "" }));
-      
+        .filter((l) => isValidPhone(l.telefone))
+        .map((l) => ({ id: l.id, telefone: toE164BR(l.telefone), nome: l.nome ?? "", empresa: l.empresa ?? "" }));
+
       setLeadsDaPasta(validos);
-      // Auto-select all by default
-      setLeadsSel(validos.map(l => l.telefone));
+      setLeadsSel(validos.map((l) => l.telefone));
     })();
   }, [pastasSel, origem]);
 
@@ -109,51 +107,39 @@ function NovaCampanha() {
 
   const getContatos = (): Contato[] => {
     if (origem === "csv") return contatosCSV;
-    return leadsDaPasta.filter(l => leadsSelSet.has(l.telefone));
+    return leadsDaPasta.filter((l) => leadsSelSet.has(l.telefone));
   };
 
-  interface MidiaInfo {
-    url: string;
-    name: string;
-    type: string;
-    path: string;
-    bucket: string;
-  }
-
-  const uploadMidia = async (): Promise<MidiaInfo | null> => {
+  const uploadMidia = async () => {
     if (!midiaFile) return null;
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return null;
-    
-    const ext = midiaFile.name.split('.').pop();
+    const ext = midiaFile.name.split(".").pop();
     const fileName = `${u.user.id}/${Date.now()}.${ext}`;
-    const bucketName = "midias";
-    
-    const { data, error } = await supabase.storage.from(bucketName).upload(fileName, midiaFile);
-    if (error) {
-      toast.error("Erro ao enviar mídia: " + error.message);
-      return null;
-    }
-    
-    const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
-    return {
-      url: urlData.publicUrl,
-      name: midiaFile.name,
-      type: midiaFile.type,
-      path: fileName,
-      bucket: bucketName,
-    };
+    const { error } = await supabase.storage.from("midias").upload(fileName, midiaFile);
+    if (error) { toast.error("Erro ao enviar mídia: " + error.message); return null; }
+    const { data: urlData } = supabase.storage.from("midias").getPublicUrl(fileName);
+    return { url: urlData.publicUrl, name: midiaFile.name, type: midiaFile.type, path: fileName, bucket: "midias" };
   };
 
   const formatarDataParaBRT = (dataLocal: string): string | null => {
     if (!dataLocal) return null;
-    // datetime-local retorna "YYYY-MM-DDTHH:mm"
-    // Anexa segundos (:00) e fuso de Brasília (-03:00)
     return `${dataLocal}:00-03:00`;
   };
 
+  const adicionarVariacao = () => setMensagensVariacoes((v) => [...v, ""]);
+  const removerVariacao = (i: number) => setMensagensVariacoes((v) => v.filter((_, idx) => idx !== i));
+  const atualizarVariacao = (i: number, val: string) =>
+    setMensagensVariacoes((v) => v.map((m, idx) => (idx === i ? val : m)));
+
+  const toggleInstancia = (id: string) => {
+    setInstanciasSelecionadas((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
   const disparar = async () => {
-    if (!instanciaId) return toast.error("Selecione uma instância de WhatsApp.");
+    if (instanciasSelecionadas.length === 0) return toast.error("Selecione ao menos uma instância de WhatsApp.");
     setLoading(true);
     try {
       const { data: u } = await supabase.auth.getUser();
@@ -161,44 +147,46 @@ function NovaCampanha() {
       const contatos = getContatos();
       if (!contatos.length) { toast.error("Nenhum contato válido selecionado"); return; }
 
-      const instancia = instancias.find(i => i.id === instanciaId);
-      if (!instancia) return toast.error("Instância inválida");
+      const instsSelecionadas = instancias
+        .filter((i) => instanciasSelecionadas.includes(i.id))
+        .map((i) => ({ id: i.id, nome: i.nome, token: i.token ?? "" }));
 
-      const { data: cfg } = await supabase
-        .from("configuracoes").select("*").eq("usuario_id", u.user.id).maybeSingle();
+      const primeiraInstancia = instsSelecionadas[0];
+      const midiaInfo = midiaFile ? await uploadMidia() : null;
 
-      let midiaInfo = null;
-      if (midiaFile) {
-        midiaInfo = await uploadMidia();
-      }
-
-      const { data: camp, error } = await supabase
+        const { data: camp, error } = await supabase
         .from("campanhas")
         .insert({
           usuario_id: u.user.id,
           nome,
-          mensagem,
-          instancia_whatsapp: instancia.id,
-          instancia_nome: instancia.nome,
-          instancia_token: instancia.token ?? "",
+          mensagem: mensagem || (mensagensVariacoes[0] ?? ""),
+          mensagens_variacoes: mensagensVariacoes.filter(Boolean) as unknown as import("@/integrations/supabase/types").Json,
+          instancias_selecionadas: instsSelecionadas as unknown as import("@/integrations/supabase/types").Json,
+          instancia_whatsapp: primeiraInstancia?.id ?? null,
+          instancia_nome: primeiraInstancia?.nome ?? "",
+          instancia_token: primeiraInstancia?.token ?? "",
           delay_minimo: delayMinimo,
           delay_maximo: delayMaximo,
           delay_mensagens: delayMensagens,
-          delay_segundos: delayMinimo, // retrocompatibilidade
+          delay_segundos: delayMinimo,
+          horario_inicio: horarioInicio,
+          horario_fim: horarioFim,
           midia_url: midiaInfo?.url ?? null,
           midia_nome: midiaInfo?.name ?? null,
           midia_tipo: midiaInfo?.type ?? null,
           midia_path: midiaInfo?.path ?? null,
           midia_bucket: midiaInfo?.bucket ?? null,
           total_contatos: contatos.length,
-          status: agendarPara ? "agendada" : "aguardando",
+          status: agendarPara ? "agendada" : "em_andamento",
           agendada_para: formatarDataParaBRT(agendarPara),
         })
-        .select().single();
-      if (error || !camp) { toast.error(error?.message ?? "Erro"); return; }
+        .select()
+        .single();
+
+      if (error || !camp) { toast.error(error?.message ?? "Erro ao criar campanha"); return; }
 
       await supabase.from("contatos_campanha").insert(
-        contatos.map((c) => ({ campanha_id: camp.id, telefone: c.telefone, nome: c.nome, empresa: c.empresa }))
+        contatos.map((c) => ({ campanha_id: camp.id, telefone: c.telefone, nome: c.nome, empresa: c.empresa })),
       );
 
       toast.success("Campanha criada com sucesso!");
@@ -207,6 +195,8 @@ function NovaCampanha() {
   };
 
   const totalContatos = origem === "csv" ? contatosCSV.length : leadsSel.length;
+  const mensagemPrincipal = mensagensVariacoes.length > 0 ? `${mensagensVariacoes.length} variação(ões)` : mensagem ? "1 mensagem" : "—";
+  const instSelecionadasNomes = instancias.filter((i) => instanciasSelecionadas.includes(i.id)).map((i) => i.nome);
 
   return (
     <div className="p-8 w-full space-y-6">
@@ -224,27 +214,41 @@ function NovaCampanha() {
       </div>
 
       {step === 1 && (
-        <Card className="p-6 space-y-4">
+        <div className="space-y-4">
+          <Card className="p-6 space-y-4">
+            <h2 className="font-semibold text-base">Dados da campanha</h2>
+
             <div className="space-y-2">
               <Label>Nome da campanha</Label>
-              <Input value={nome} onChange={(e) => setNome(e.target.value)} />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Instância do WhatsApp</Label>
-              <select 
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={instanciaId} 
-                onChange={(e) => setInstanciaId(e.target.value)}
-              >
-                <option value="" disabled>Selecione uma instância</option>
-                {instancias.map(i => (
-                  <option key={i.id} value={i.id}>{i.nome} ({i.instancia})</option>
-                ))}
-              </select>
-              {instancias.length === 0 && <p className="text-xs text-red-500">Cadastre uma instância em Configurações.</p>}
+              <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Prospecção Junho 2026" />
             </div>
 
+            {/* Instâncias — múltipla seleção */}
+            <div className="space-y-2">
+              <Label>Instâncias do WhatsApp <span className="text-xs text-muted-foreground">(selecione uma ou mais — a mensagem sorteará entre elas)</span></Label>
+              {instancias.length === 0 && (
+                <p className="text-xs text-red-500">Cadastre instâncias em Configurações.</p>
+              )}
+              <div className="flex flex-col gap-2 p-3 border rounded-md">
+                {instancias.map((i) => (
+                  <label key={i.id} className="flex items-center gap-3 cursor-pointer">
+                    <Checkbox
+                      checked={instanciasSelecionadas.includes(i.id)}
+                      onCheckedChange={() => toggleInstancia(i.id)}
+                    />
+                    <span className="text-sm font-medium">{i.nome}</span>
+                    <span className="text-xs text-muted-foreground">({i.instancia})</span>
+                  </label>
+                ))}
+              </div>
+              {instanciasSelecionadas.length > 1 && (
+                <p className="text-xs text-green-600 font-medium">
+                  {instanciasSelecionadas.length} instâncias selecionadas — o sistema sorteia qual envia cada mensagem
+                </p>
+              )}
+            </div>
+
+            {/* Delays */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Delay Mínimo (s)</Label>
@@ -255,69 +259,130 @@ function NovaCampanha() {
                 <Input type="number" min={delayMinimo} value={delayMaximo} onChange={(e) => setDelayMaximo(Number(e.target.value))} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Intervalo entre Mídia e Mensagem (s)</Label>
-              <Input type="number" min={1} value={delayMensagens} onChange={(e) => setDelayMensagens(Number(e.target.value))} />
-              <p className="text-xs text-muted-foreground">Tempo de espera do n8n para enviar a foto e depois a mensagem.</p>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Mídia (Opcional)</Label>
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <Input type="file" accept="image/*,video/*,.pdf" onChange={(e) => setMidiaFile(e.target.files?.[0] || null)} />
-                  {midiaFile && (
-                    <Button variant="ghost" size="icon" onClick={() => setMidiaFile(null)}>
-                      <X className="w-4 h-4 text-red-500" />
-                    </Button>
-                  )}
-                </div>
-                {midiaFile && (
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <div className="w-16 h-16 bg-muted rounded-md border flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" title="Clique para ampliar">
-                        {midiaFile.type.startsWith("image/") ? (
-                          <img src={URL.createObjectURL(midiaFile)} alt="Prévia da Mídia" className="w-full h-full object-cover" />
-                        ) : midiaFile.type.startsWith("video/") ? (
-                          <video src={URL.createObjectURL(midiaFile)} className="w-full h-full object-cover" muted />
-                        ) : (
-                          <div className="p-1 text-center">
-                            <UploadCloud className="w-6 h-6 mx-auto text-muted-foreground" />
-                          </div>
-                        )}
-                      </div>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-4xl border-none bg-transparent shadow-none p-0 flex justify-center outline-none">
-                      {midiaFile.type.startsWith("image/") ? (
-                        <img src={URL.createObjectURL(midiaFile)} alt="Prévia Ampliada" className="max-h-[85vh] rounded-lg object-contain" />
-                      ) : midiaFile.type.startsWith("video/") ? (
-                        <video src={URL.createObjectURL(midiaFile)} className="max-h-[85vh] rounded-lg object-contain" controls autoPlay />
-                      ) : (
-                        <div className="bg-background p-8 rounded-lg text-center max-w-md w-full">
-                          <UploadCloud className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                          <p className="font-medium text-lg">{midiaFile.name}</p>
-                          <p className="text-sm text-muted-foreground mt-2">O preview deste tipo de arquivo não está disponível no navegador.</p>
-                        </div>
-                      )}
-                    </DialogContent>
-                  </Dialog>
-                )}
+            {/* Horário de envio */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Horário início (BRT)</Label>
+                <Input type="time" value={horarioInicio} onChange={(e) => setHorarioInicio(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Horário fim (BRT)</Label>
+                <Input type="time" value={horarioFim} onChange={(e) => setHorarioFim(e.target.value)} />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">Fora deste horário o motor pausa os disparos automaticamente.</p>
 
             <div className="space-y-2">
-              <Label>Mensagem</Label>
-              <Textarea rows={6} value={mensagem} onChange={(e) => setMensagem(e.target.value)} />
-              <p className="text-xs text-muted-foreground">Variáveis: {"{nome}"}, {"{empresa}"}, {"{telefone}"}</p>
+              <Label>Intervalo entre Mídia e Texto (s)</Label>
+              <Input type="number" min={0} value={delayMensagens} onChange={(e) => setDelayMensagens(Number(e.target.value))} />
             </div>
           </Card>
+
+          {/* Mensagens */}
+          <Card className="p-6 space-y-4">
+            <h2 className="font-semibold text-base">Mensagens</h2>
+
+            <div className="space-y-2">
+              <Label>
+                Mensagem principal <span className="text-xs text-muted-foreground">(usada quando não há variações)</span>
+              </Label>
+              <Textarea
+                rows={5}
+                value={mensagem}
+                onChange={(e) => setMensagem(e.target.value)}
+                placeholder="Olá {nome}, tudo bem?"
+              />
+              <p className="text-xs text-muted-foreground">Variáveis: {"{nome}"}, {"{empresa}"}, {"{telefone}"}</p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>
+                  Variações de mensagem <span className="text-xs text-muted-foreground">(o sistema sorteia uma por envio)</span>
+                </Label>
+                <Button type="button" variant="outline" size="sm" onClick={adicionarVariacao}>
+                  <Plus className="w-3 h-3 mr-1" /> Adicionar variação
+                </Button>
+              </div>
+
+              {mensagensVariacoes.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">Sem variações — será usada a mensagem principal acima.</p>
+              )}
+
+              {mensagensVariacoes.map((v, i) => (
+                <div key={i} className="flex gap-2">
+                  <Textarea
+                    rows={3}
+                    className="flex-1 text-sm"
+                    value={v}
+                    onChange={(e) => atualizarVariacao(i, e.target.value)}
+                    placeholder={`Variação ${i + 1} — use {nome}, {empresa}, {telefone}`}
+                  />
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removerVariacao(i)}>
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </Button>
+                </div>
+              ))}
+
+              {mensagensVariacoes.length > 0 && (
+                <p className="text-xs text-green-600 font-medium">
+                  {mensagensVariacoes.filter(Boolean).length} variação(ões) ativa(s) — a mensagem principal será ignorada
+                </p>
+              )}
+            </div>
+
+            {/* Mídia */}
+            <div className="space-y-2">
+              <Label>Mídia (opcional)</Label>
+              <div className="flex items-center gap-2">
+                <Input type="file" accept="image/*,video/*,.pdf" onChange={(e) => setMidiaFile(e.target.files?.[0] || null)} />
+                {midiaFile && (
+                  <Button variant="ghost" size="icon" onClick={() => setMidiaFile(null)}>
+                    <X className="w-4 h-4 text-red-500" />
+                  </Button>
+                )}
+              </div>
+              {midiaFile && (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <div className="w-16 h-16 bg-muted rounded-md border flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80">
+                      {midiaFile.type.startsWith("image/") ? (
+                        <img src={URL.createObjectURL(midiaFile)} alt="Prévia" className="w-full h-full object-cover" />
+                      ) : midiaFile.type.startsWith("video/") ? (
+                        <video src={URL.createObjectURL(midiaFile)} className="w-full h-full object-cover" muted />
+                      ) : (
+                        <UploadCloud className="w-6 h-6 text-muted-foreground" />
+                      )}
+                    </div>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl border-none bg-transparent shadow-none p-0 flex justify-center">
+                    {midiaFile.type.startsWith("image/") ? (
+                      <img src={URL.createObjectURL(midiaFile)} alt="Prévia" className="max-h-[85vh] rounded-lg object-contain" />
+                    ) : midiaFile.type.startsWith("video/") ? (
+                      <video src={URL.createObjectURL(midiaFile)} className="max-h-[85vh] rounded-lg" controls autoPlay />
+                    ) : (
+                      <div className="bg-background p-8 rounded-lg text-center">
+                        <UploadCloud className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                        <p className="font-medium">{midiaFile.name}</p>
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+          </Card>
+        </div>
       )}
 
       {step === 2 && (
         <Card className="p-6">
           <Tabs value={origem} onValueChange={(v) => setOrigem(v as "csv" | "lista")}>
-            <TabsList><TabsTrigger value="csv">Importar CSV</TabsTrigger><TabsTrigger value="lista">Lista salva (Pastas)</TabsTrigger></TabsList>
-            
+            <TabsList>
+              <TabsTrigger value="csv">Importar CSV</TabsTrigger>
+              <TabsTrigger value="lista">Lista salva (Pastas)</TabsTrigger>
+            </TabsList>
+
             <TabsContent value="csv" className="space-y-4 mt-4">
               <Input type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && handleCSV(e.target.files[0])} />
               <p className="text-sm text-muted-foreground">Colunas: telefone (obrigatória), nome, empresa</p>
@@ -330,7 +395,7 @@ function NovaCampanha() {
                 </div>
               )}
             </TabsContent>
-            
+
             <TabsContent value="lista" className="space-y-4 mt-4">
               <div className="space-y-2">
                 <Label>Selecione as pastas:</Label>
@@ -351,10 +416,10 @@ function NovaCampanha() {
               {pastasSel.length > 0 && (
                 <div className="space-y-2 border-t pt-4">
                   <div className="flex items-center justify-between">
-                    <Label>Leads nas pastas selecionadas ({leadsDaPasta.length})</Label>
+                    <Label>Leads ({leadsDaPasta.length})</Label>
                     <div className="space-x-2">
-                      <Button variant="outline" size="sm" onClick={() => setLeadsSel(leadsDaPasta.map(l => l.telefone))}>Marcar Todos</Button>
-                      <Button variant="outline" size="sm" onClick={() => setLeadsSel([])}>Desmarcar Todos</Button>
+                      <Button variant="outline" size="sm" onClick={() => setLeadsSel(leadsDaPasta.map((l) => l.telefone))}>Marcar todos</Button>
+                      <Button variant="outline" size="sm" onClick={() => setLeadsSel([])}>Desmarcar</Button>
                     </div>
                   </div>
                   <div className="max-h-64 overflow-y-auto space-y-1 p-2 border rounded">
@@ -362,15 +427,14 @@ function NovaCampanha() {
                       <label key={l.id} className="flex items-center gap-3 p-2 hover:bg-muted rounded cursor-pointer">
                         <Checkbox
                           checked={leadsSelSet.has(l.telefone)}
-                          onCheckedChange={(c) => setLeadsSel(c ? [...leadsSel, l.telefone] : leadsSel.filter(x => x !== l.telefone))}
+                          onCheckedChange={(c) => setLeadsSel(c ? [...leadsSel, l.telefone] : leadsSel.filter((x) => x !== l.telefone))}
                         />
                         <span className="text-sm w-32">{l.telefone}</span>
                         <span className="text-sm text-muted-foreground flex-1">{l.nome || "Sem nome"}</span>
                       </label>
                     ))}
-                    {leadsDaPasta.length === 0 && <p className="text-sm text-muted-foreground">Nenhum lead com telefone válido encontrado nestas pastas.</p>}
                   </div>
-                  <p className="text-sm font-medium text-primary">Contatos selecionados: {leadsSel.length}</p>
+                  <p className="text-sm font-medium text-primary">Selecionados: {leadsSel.length}</p>
                 </div>
               )}
             </TabsContent>
@@ -382,28 +446,28 @@ function NovaCampanha() {
         <Card className="p-6 space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-4">
-              <div><Label className="text-muted-foreground">Nome da Campanha</Label><p className="font-medium">{nome}</p></div>
+              <div><Label className="text-muted-foreground">Nome</Label><p className="font-medium">{nome}</p></div>
               <div>
-                <Label className="text-muted-foreground">Instância</Label>
-                <p className="font-medium">{instancias.find(i => i.id === instanciaId)?.nome || "Não selecionada"}</p>
+                <Label className="text-muted-foreground">Instâncias selecionadas</Label>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {instSelecionadasNomes.map((n) => (
+                    <span key={n} className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">{n}</span>
+                  ))}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <div><Label className="text-muted-foreground">Delay Min</Label><p>{delayMinimo}s</p></div>
-                <div><Label className="text-muted-foreground">Delay Max</Label><p>{delayMaximo}s</p></div>
+                <div><Label className="text-muted-foreground">Delay min</Label><p>{delayMinimo}s</p></div>
+                <div><Label className="text-muted-foreground">Delay max</Label><p>{delayMaximo}s</p></div>
               </div>
-              <div><Label className="text-muted-foreground">Intervalo entre Mídia/Mensagem</Label><p>{delayMensagens}s</p></div>
-              <div><Label className="text-muted-foreground">Contatos Selecionados</Label><p className="font-bold text-primary">{totalContatos}</p></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label className="text-muted-foreground">Horário início</Label><p>{horarioInicio}</p></div>
+                <div><Label className="text-muted-foreground">Horário fim</Label><p>{horarioFim}</p></div>
+              </div>
+              <div><Label className="text-muted-foreground">Contatos</Label><p className="font-bold text-primary">{totalContatos}</p></div>
             </div>
-            
             <div className="space-y-4">
-              <div>
-                <Label className="text-muted-foreground">Mídia Anexada</Label>
-                <p className="font-medium">{midiaFile ? midiaFile.name : "Nenhuma"}</p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Mensagem</Label>
-                <p className="text-sm whitespace-pre-wrap p-3 bg-muted rounded h-32 overflow-y-auto">{mensagem}</p>
-              </div>
+              <div><Label className="text-muted-foreground">Mensagens</Label><p>{mensagemPrincipal}</p></div>
+              <div><Label className="text-muted-foreground">Mídia</Label><p>{midiaFile ? midiaFile.name : "Nenhuma"}</p></div>
               <div className="space-y-2">
                 <Label className="text-muted-foreground">Agendar para (opcional)</Label>
                 <Input type="datetime-local" value={agendarPara} onChange={(e) => setAgendarPara(e.target.value)} />
@@ -416,9 +480,17 @@ function NovaCampanha() {
       <div className="flex justify-between">
         <Button variant="ghost" disabled={step === 1} onClick={() => setStep(step - 1)}>Voltar</Button>
         {step < 3 ? (
-          <Button onClick={() => setStep(step + 1)} disabled={(step === 1 && (!nome || !instanciaId)) || (step === 2 && totalContatos === 0)}>Continuar</Button>
+          <Button
+            onClick={() => setStep(step + 1)}
+            disabled={
+              (step === 1 && (!nome || instanciasSelecionadas.length === 0 || (!mensagem && mensagensVariacoes.filter(Boolean).length === 0))) ||
+              (step === 2 && totalContatos === 0)
+            }
+          >
+            Continuar
+          </Button>
         ) : (
-          <Button onClick={disparar} disabled={loading || !instanciaId}>
+          <Button onClick={disparar} disabled={loading || instanciasSelecionadas.length === 0}>
             {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Criar Campanha
           </Button>

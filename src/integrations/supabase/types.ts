@@ -51,14 +51,19 @@ export type Database = {
           entregues: number
           enviadas: number
           erros: number
+          horario_fim: string | null
+          horario_inicio: string | null
           id: string
           instancia_nome: string | null
           instancia_token: string | null
           instancia_whatsapp: string | null
+          instancias_selecionadas: Json | null
           mensagem: string
+          mensagens_variacoes: Json | null
           midia_bucket: string | null
           midia_nome: string | null
           midia_path: string | null
+          midia_tipo: string | null
           midia_url: string | null
           nome: string
           status: string
@@ -76,14 +81,19 @@ export type Database = {
           entregues?: number
           enviadas?: number
           erros?: number
+          horario_fim?: string | null
+          horario_inicio?: string | null
           id?: string
           instancia_nome?: string | null
           instancia_token?: string | null
           instancia_whatsapp?: string | null
+          instancias_selecionadas?: Json | null
           mensagem: string
+          mensagens_variacoes?: Json | null
           midia_bucket?: string | null
           midia_nome?: string | null
           midia_path?: string | null
+          midia_tipo?: string | null
           midia_url?: string | null
           nome: string
           status?: string
@@ -101,14 +111,19 @@ export type Database = {
           entregues?: number
           enviadas?: number
           erros?: number
+          horario_fim?: string | null
+          horario_inicio?: string | null
           id?: string
           instancia_nome?: string | null
           instancia_token?: string | null
           instancia_whatsapp?: string | null
+          instancias_selecionadas?: Json | null
           mensagem?: string
+          mensagens_variacoes?: Json | null
           midia_bucket?: string | null
           midia_nome?: string | null
           midia_path?: string | null
+          midia_tipo?: string | null
           midia_url?: string | null
           nome?: string
           status?: string
@@ -179,27 +194,39 @@ export type Database = {
           campanha_id: string
           empresa: string | null
           id: string
+          instancia_usada: string | null
+          mensagem_enviada: string | null
+          next_send_at: string | null
           nome: string | null
           status: string
           telefone: string
+          wpp_valido: boolean | null
         }
         Insert: {
           atualizado_em?: string
           campanha_id: string
           empresa?: string | null
           id?: string
+          instancia_usada?: string | null
+          mensagem_enviada?: string | null
+          next_send_at?: string | null
           nome?: string | null
           status?: string
           telefone: string
+          wpp_valido?: boolean | null
         }
         Update: {
           atualizado_em?: string
           campanha_id?: string
           empresa?: string | null
           id?: string
+          instancia_usada?: string | null
+          mensagem_enviada?: string | null
+          next_send_at?: string | null
           nome?: string | null
           status?: string
           telefone?: string
+          wpp_valido?: boolean | null
         }
         Relationships: [
           {
