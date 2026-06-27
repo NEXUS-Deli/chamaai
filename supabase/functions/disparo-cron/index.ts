@@ -25,7 +25,10 @@ function estaNoHorario(inicio: string, fim: string): boolean {
   const total = horaBRT * 60 + minBRT
   const [hI, mI] = inicio.split(':').map(Number)
   const [hF, mF] = fim.split(':').map(Number)
-  return total >= hI * 60 + mI && total <= hF * 60 + mF
+  const inicioMin = hI * 60 + mI
+  // "00:00" como fim significa meia-noite = fim do dia
+  const fimMin = (hF === 0 && mF === 0) ? 24 * 60 : hF * 60 + mF
+  return total >= inicioMin && total <= fimMin
 }
 
 function randomEntre(min: number, max: number): number {

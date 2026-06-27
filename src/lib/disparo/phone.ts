@@ -29,7 +29,8 @@ export function estaNoHorario(inicio: string, fim: string): boolean {
   const [hI, mI] = inicio.split(':').map(Number);
   const [hF, mF] = fim.split(':').map(Number);
   const inicioMin = hI * 60 + mI;
-  const fimMin = hF * 60 + mF;
+  // "00:00" como fim significa meia-noite = fim do dia
+  const fimMin = (hF === 0 && mF === 0) ? 24 * 60 : hF * 60 + mF;
 
   return totalMinutos >= inicioMin && totalMinutos <= fimMin;
 }
