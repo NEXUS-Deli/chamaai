@@ -145,6 +145,13 @@ function NovaCampanha() {
     };
   };
 
+  const formatarDataParaBRT = (dataLocal: string): string | null => {
+    if (!dataLocal) return null;
+    // datetime-local retorna "YYYY-MM-DDTHH:mm"
+    // Anexa segundos (:00) e fuso de Brasília (-03:00)
+    return `${dataLocal}:00-03:00`;
+  };
+
   const disparar = async () => {
     if (!instanciaId) return toast.error("Selecione uma instância de WhatsApp.");
     setLoading(true);
@@ -185,7 +192,7 @@ function NovaCampanha() {
           midia_bucket: midiaInfo?.bucket ?? null,
           total_contatos: contatos.length,
           status: agendarPara ? "agendada" : "aguardando",
-          agendada_para: agendarPara || null,
+          agendada_para: formatarDataParaBRT(agendarPara),
         })
         .select().single();
       if (error || !camp) { toast.error(error?.message ?? "Erro"); return; }
