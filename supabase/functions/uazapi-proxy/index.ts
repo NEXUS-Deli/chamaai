@@ -29,15 +29,62 @@ serve(async (req) => {
           'Content-Type': 'application/json',
           'admintoken': UAZAPI_ADMIN_TOKEN
         },
-        body: JSON.stringify({
-          name: payload.name
-        })
+        body: JSON.stringify({ name: payload.name })
       })
 
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.error || data.message || 'Erro ao criar instância na UAZAPI')
+      }
+
+      // Tenta configurar webhook automaticamente logo após a criação
+      const instanceToken = data?.token || data?.instance?.token
+      const instanceId = data?.instance?.id || data?.id || data?.instance?.instanceId
+
+      if (instanceToken) {
+        const WEBHOOK_URL = Deno.env.get('SUPABASE_URL')
+          ? `${Deno.env.get('SUPABASE_URL')}/functions/v1/disparo-webhook`
+          : 'https://jaoxormsyftctpsegtza.supabase.co/functions/v1/disparo-webhook'
+
+        // uazapiGO usa events como string "messages", não array
+        const webhookCandidatos = [
+          { headers: { 'Content-Type': 'application/json', 'token': instanceToken },
+            url: `${UAZAPI_BASE_URL}/webhook/set`,
+            body: { webhookUrl: WEBHOOK_URL, enabled: true, events: 'messages' } },
+          { headers: { 'Content-Type': 'application/json', 'token': instanceToken },
+            url: `${UAZAPI_BASE_URL}/webhook`,
+            body: { url: WEBHOOK_URL, enabled: true, events: 'messages' } },
+          { headers: { 'Content-Type': 'application/json', 'token': instanceToken },
+            url: `${UAZAPI_BASE_URL}/webhook/create`,
+            body: { url: WEBHOOK_URL, enabled: true, events: 'messages' } },
+          ...(instanceId ? [
+            { headers: { 'Content-Type': 'application/json', 'admintoken': UAZAPI_ADMIN_TOKEN },
+              url: `${UAZAPI_BASE_URL}/webhook/set`,
+              body: { instanceId, webhookUrl: WEBHOOK_URL, enabled: true, events: 'messages' } },
+            { headers: { 'Content-Type': 'application/json', 'admintoken': UAZAPI_ADMIN_TOKEN },
+              url: `${UAZAPI_BASE_URL}/webhook`,
+              body: { instanceId, url: WEBHOOK_URL, enabled: true, events: 'messages' } },
+          ] : []),
+        ]
+
+        for (const candidato of webhookCandidatos) {
+          try {
+            const r = await fetch(candidato.url, {
+              method: 'POST',
+              headers: candidato.headers,
+              body: JSON.stringify(candidato.body),
+            })
+            const rText = await r.text()
+            if (r.ok) {
+              console.log(`[uazapi-proxy] Webhook configurado via ${candidato.url}`)
+              break
+            }
+            console.warn(`[uazapi-proxy] Webhook falhou ${candidato.url}: ${r.status} ${rText}`)
+          } catch (e) {
+            console.warn(`[uazapi-proxy] Webhook erro ${candidato.url}:`, e)
+          }
+        }
       }
 
       return new Response(JSON.stringify(data), {
@@ -163,29 +210,57 @@ serve(async (req) => {
 
     // --- SET WEBHOOK (configura entrega de ACK para a Edge Function disparo-webhook) ---
     if (action === 'set_webhook') {
-      const { token } = payload
+      const { token, instanceId } = payload
       if (!token) throw new Error('Token da instância é obrigatório')
 
       const WEBHOOK_URL = Deno.env.get('SUPABASE_URL')
         ? `${Deno.env.get('SUPABASE_URL')}/functions/v1/disparo-webhook`
-        : `${Deno.env.get('SUPABASE_FUNCTIONS_URL') ?? ''}/disparo-webhook`
+        : 'https://jaoxormsyftctpsegtza.supabase.co/functions/v1/disparo-webhook'
 
-      const response = await fetch(`${UAZAPI_BASE_URL}/webhook/set`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'token': token,
-        },
-        body: JSON.stringify({
-          webhookUrl: WEBHOOK_URL,
-          enabled: true,
-          events: ['messages.update', 'messages.upsert'],
-        }),
-      })
+      const tokenHeaders = { 'Content-Type': 'application/json', 'token': token }
+      const adminHeaders = { 'Content-Type': 'application/json', 'admintoken': UAZAPI_ADMIN_TOKEN }
 
-      // Trata como sucesso mesmo que o endpoint retorne 4xx (nem todas as versões uazapi suportam)
-      const data = response.ok ? await response.json() : { set: false, status: response.status }
-      return new Response(JSON.stringify(data), {
+      // uazapiGO usa events como string "messages", não array
+      const candidatos = [
+        { headers: tokenHeaders, url: `${UAZAPI_BASE_URL}/webhook/set`,
+          body: { webhookUrl: WEBHOOK_URL, enabled: true, events: 'messages' } },
+        { headers: tokenHeaders, url: `${UAZAPI_BASE_URL}/webhook`,
+          body: { url: WEBHOOK_URL, enabled: true, events: 'messages' } },
+        { headers: tokenHeaders, url: `${UAZAPI_BASE_URL}/webhook/create`,
+          body: { url: WEBHOOK_URL, enabled: true, events: 'messages' } },
+        { headers: tokenHeaders, url: `${UAZAPI_BASE_URL}/instance/webhook`,
+          body: { webhook: WEBHOOK_URL, enabled: true, events: 'messages' } },
+        ...(instanceId ? [
+          { headers: adminHeaders, url: `${UAZAPI_BASE_URL}/webhook/set`,
+            body: { instanceId, webhookUrl: WEBHOOK_URL, enabled: true, events: 'messages' } },
+          { headers: adminHeaders, url: `${UAZAPI_BASE_URL}/webhook`,
+            body: { instanceId, url: WEBHOOK_URL, enabled: true, events: 'messages' } },
+        ] : []),
+      ]
+
+      let lastStatus = 0
+      let lastBody = ''
+      for (const candidato of candidatos) {
+        const r = await fetch(candidato.url, {
+          method: 'POST',
+          headers: candidato.headers,
+          body: JSON.stringify(candidato.body),
+        })
+        lastStatus = r.status
+        lastBody = await r.text()
+        if (r.ok) {
+          let parsed: unknown = {}
+          try { parsed = JSON.parse(lastBody) } catch { /* ignora */ }
+          console.log(`[uazapi-proxy] set_webhook OK via ${candidato.url}`)
+          return new Response(JSON.stringify({ ok: true, ...(parsed as object) }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          })
+        }
+        console.warn(`[uazapi-proxy] set_webhook falhou em ${candidato.url}: ${r.status} ${lastBody}`)
+      }
+
+      return new Response(JSON.stringify({ ok: false, message: `Webhook não configurado (HTTP ${lastStatus}): ${lastBody}` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })

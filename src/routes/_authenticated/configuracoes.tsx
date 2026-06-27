@@ -217,10 +217,14 @@ function ConfigPage() {
       }
 
       // Configura webhook automaticamente para rastreamento de entrega
+      // Nota: create_instance já tentou configurar; esta chamada é um segundo ciclo de fallback
       try {
-        await callProxy('set_webhook', { token: uazapiToken });
+        const webhookResult = await callProxy('set_webhook', { token: uazapiToken, instanceId: uazapiId });
+        if (!webhookResult?.ok) {
+          console.warn('Webhook não configurado automaticamente:', webhookResult?.message);
+          toast.warning('Instância criada! Configure o webhook manualmente na uazapi para rastrear entregas.');
+        }
       } catch {
-        // Não bloqueia criação se webhook falhar — pode ser configurado manualmente
         console.warn('Webhook não configurado automaticamente');
       }
 
