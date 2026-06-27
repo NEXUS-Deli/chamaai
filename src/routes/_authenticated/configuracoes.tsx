@@ -253,7 +253,9 @@ function ConfigPage() {
         msg.toLowerCase().includes("not found") ||
         msg.toLowerCase().includes("404") ||
         msg.toLowerCase().includes("não encontrada") ||
-        msg.toLowerCase().includes("instance not found");
+        msg.toLowerCase().includes("instance not found") ||
+        msg.toLowerCase().includes("invalid token") ||
+        msg.toLowerCase().includes("unauthorized");
 
       if (!jaRemovida) {
         // Erro real: bloqueia exclusão local para manter sincronismo
