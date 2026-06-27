@@ -165,11 +165,10 @@ async function processarContato(
   if (midia) {
     const midiaOk = await enviarMidia(jid, midia.url, midia.tipo, midia.nome, mensagemFinal, instancia.token);
     if (!midiaOk) {
-      await enviarTexto(jid, mensagemFinal, instancia.token);
-    } else if (campanha.delay_mensagens > 0) {
-      await new Promise((r) => setTimeout(r, campanha.delay_mensagens * 1000));
+      // Mídia falhou — envia só texto como fallback
       await enviarTexto(jid, mensagemFinal, instancia.token);
     }
+    // Mídia enviada com sucesso: legenda já está embutida, não envia texto separado
   } else {
     await enviarTexto(jid, mensagemFinal, instancia.token);
   }

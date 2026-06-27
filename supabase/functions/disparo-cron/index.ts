@@ -253,16 +253,15 @@ async function processarDisparo() {
             : []
           const midia = todasMidias.length > 0 ? escolherAleatorio(todasMidias) : null
 
-          // Envia mídia + texto ou só texto; captura messageId para rastreamento
+          // Envia mídia (com legenda) ou apenas texto
           let mensagemId: string | null = null
           if (midia) {
             mensagemId = await enviarMidia(jid, midia.url, midia.tipo, midia.nome, mensagemFinal, instancia.token)
             if (!mensagemId) {
+              // Mídia falhou — envia só texto como fallback
               mensagemId = await enviarTexto(jid, mensagemFinal, instancia.token)
-            } else if (campanha.delay_mensagens > 0) {
-              await sleep(campanha.delay_mensagens * 1000)
-              await enviarTexto(jid, mensagemFinal, instancia.token)
             }
+            // Mídia enviada com sucesso: legenda já está embutida, não envia texto separado
           } else {
             mensagemId = await enviarTexto(jid, mensagemFinal, instancia.token)
           }
