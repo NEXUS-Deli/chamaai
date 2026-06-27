@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff } from "lucide-react";
+import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff, Webhook } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
@@ -80,6 +80,7 @@ function ConfigPage() {
   const [novaInstanciaNome, setNovaInstanciaNome] = useState("");
   // Mapa de status dinâmico por instância: 'connected' | 'connecting' | 'disconnected'
   const [statusMap, setStatusMap] = useState<Record<string, string>>({});
+  const [webhookLoadingId, setWebhookLoadingId] = useState<string | null>(null);
 
   // Connection Modal States
   const [connectModalOpen, setConnectModalOpen] = useState(false);
@@ -397,6 +398,19 @@ function ConfigPage() {
     );
   };
 
+  const handleSetWebhook = async (inst: Instancia) => {
+    setWebhookLoadingId(inst.id);
+    try {
+      await callProxy('set_webhook', { token: inst.token });
+      toast.success(`Webhook configurado para "${inst.nome}"! Entregas serão rastreadas.`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao configurar webhook";
+      toast.error(msg);
+    } finally {
+      setWebhookLoadingId(null);
+    }
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchInstancias();
@@ -447,7 +461,7 @@ function ConfigPage() {
         )}
         <div className="grid gap-4 md:grid-cols-2">
           {instancias.map((inst) => (
-            <Card key={inst.id} className="p-4 flex flex-col justify-between h-44">
+            <Card key={inst.id} className="p-4 flex flex-col justify-between">
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="font-bold text-lg flex items-center gap-2">
@@ -473,6 +487,18 @@ function ConfigPage() {
                   Desconectar
                 </Button>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 w-full text-xs text-muted-foreground"
+                onClick={() => handleSetWebhook(inst)}
+                disabled={webhookLoadingId === inst.id}
+              >
+                {webhookLoadingId === inst.id
+                  ? <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                  : <Webhook className="w-3 h-3 mr-2" />}
+                Configurar Webhook (rastrear entregas)
+              </Button>
             </Card>
           ))}
         </div>
