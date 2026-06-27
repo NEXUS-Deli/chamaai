@@ -447,7 +447,7 @@ function ConfigPage() {
         )}
         <div className="grid gap-4 md:grid-cols-2">
           {instancias.map((inst) => (
-            <Card key={inst.id} className="p-4 flex flex-col justify-between">
+            <Card key={inst.id} className="p-4 flex flex-col justify-between h-44">
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="font-bold text-lg flex items-center gap-2">
