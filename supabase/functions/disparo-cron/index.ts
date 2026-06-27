@@ -60,18 +60,21 @@ async function verificarWhatsApp(
   }
 }
 
-async function enviarTexto(jid: string, texto: string, token: string): Promise<boolean> {
+// Returns messageId on success, null on failure
+async function enviarTexto(jid: string, texto: string, token: string): Promise<string | null> {
   try {
     const res = await fetch(`${UAZAPI_BASE_URL}/send/text`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', token },
       body: JSON.stringify({ number: jid, text: texto }),
     })
-    return res.ok
-  } catch { return false }
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.key?.id ?? data?.id ?? null
+  } catch { return null }
 }
 
-// Unified media endpoint per uazapi spec: /send/media with type field
+// Returns messageId on success, null on failure
 async function enviarMidia(
   jid: string,
   url: string,
@@ -79,7 +82,7 @@ async function enviarMidia(
   nomeArquivo: string,
   legenda: string,
   token: string,
-): Promise<boolean> {
+): Promise<string | null> {
   try {
     let type: string
     if (tipo.startsWith('image/')) type = 'image'
@@ -94,8 +97,10 @@ async function enviarMidia(
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', token },
       body: JSON.stringify(body),
     })
-    return res.ok
-  } catch { return false }
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.key?.id ?? data?.id ?? null
+  } catch { return null }
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -237,9 +242,10 @@ async function processarDisparo() {
             : campanha.mensagem
           const mensagemFinal = aplicarVariaveis(mensagemBase, contato)
 
-          // Envia mídia + texto ou só texto
+          // Envia mídia + texto ou só texto; captura messageId para rastreamento
+          let mensagemId: string | null = null
           if (campanha.midia_url && campanha.midia_tipo) {
-            const midiaOk = await enviarMidia(
+            mensagemId = await enviarMidia(
               jid,
               campanha.midia_url,
               campanha.midia_tipo,
@@ -247,20 +253,21 @@ async function processarDisparo() {
               mensagemFinal,
               instancia.token,
             )
-            if (!midiaOk) {
-              await enviarTexto(jid, mensagemFinal, instancia.token)
+            if (!mensagemId) {
+              mensagemId = await enviarTexto(jid, mensagemFinal, instancia.token)
             } else if (campanha.delay_mensagens > 0) {
               await sleep(campanha.delay_mensagens * 1000)
               await enviarTexto(jid, mensagemFinal, instancia.token)
             }
           } else {
-            await enviarTexto(jid, mensagemFinal, instancia.token)
+            mensagemId = await enviarTexto(jid, mensagemFinal, instancia.token)
           }
 
           await supabase
             .from('contatos_campanha')
             .update({
               status: 'enviado',
+              mensagem_id: mensagemId,
               instancia_usada: instancia.nome || instancia.token.slice(0, 8),
               mensagem_enviada: mensagemFinal,
               wpp_valido: true,

@@ -3,7 +3,6 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff } from "lucide-react";
@@ -215,6 +214,14 @@ function ConfigPage() {
         throw new Error(e1.message);
       } else {
         dbData = { ...(d1 as object), status: 'disconnected' } as Instancia;
+      }
+
+      // Configura webhook automaticamente para rastreamento de entrega
+      try {
+        await callProxy('set_webhook', { token: uazapiToken });
+      } catch {
+        // Não bloqueia criação se webhook falhar — pode ser configurado manualmente
+        console.warn('Webhook não configurado automaticamente');
       }
 
       setInstancias([dbData, ...instancias]);

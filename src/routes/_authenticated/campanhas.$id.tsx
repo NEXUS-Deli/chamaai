@@ -4,12 +4,50 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Pause, Play, X, Loader2 } from "lucide-react";
+import { Pause, Play, X, Loader2, FileText, ImageIcon, Video } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/campanhas/$id")({
   component: Detalhes,
 });
+
+function MidiaPreview({ tipo, url, nome }: { tipo: string; url: string; nome: string }) {
+  if (tipo.startsWith("image/")) {
+    return (
+      <div className="flex items-center gap-3">
+        <img src={url} alt={nome} className="w-16 h-16 rounded-md object-cover border" />
+        <div>
+          <p className="text-sm font-medium">{nome}</p>
+          <p className="text-xs text-muted-foreground">Imagem</p>
+        </div>
+      </div>
+    );
+  }
+  if (tipo.startsWith("video/")) {
+    return (
+      <div className="flex items-center gap-3">
+        <div className="w-16 h-16 rounded-md border bg-muted flex items-center justify-center">
+          <Video className="w-6 h-6 text-muted-foreground" />
+        </div>
+        <div>
+          <p className="text-sm font-medium">{nome}</p>
+          <p className="text-xs text-muted-foreground">Vídeo</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3">
+      <div className="w-16 h-16 rounded-md border bg-muted flex items-center justify-center">
+        <FileText className="w-6 h-6 text-muted-foreground" />
+      </div>
+      <div>
+        <p className="text-sm font-medium">{nome}</p>
+        <p className="text-xs text-muted-foreground">Documento</p>
+      </div>
+    </div>
+  );
+}
 
 function Detalhes() {
   const { id } = Route.useParams();
@@ -30,7 +68,6 @@ function Detalhes() {
 
   useEffect(() => { load(); }, [id]);
 
-  // Polling a cada 5s enquanto em andamento ou pausada
   useEffect(() => {
     if (!camp || !["em_andamento", "pausada"].includes(camp.status)) return;
     const t = setInterval(load, 5000);
@@ -39,39 +76,42 @@ function Detalhes() {
 
   if (!camp) return <div className="p-8">Carregando…</div>;
 
+  // Delay médio entre envios reais
+  const contatosEnviados = [...contatos]
+    .filter((c) => ["enviado", "entregue", "lido"].includes(c.status))
+    .sort((a, b) => new Date(a.atualizado_em).getTime() - new Date(b.atualizado_em).getTime());
+
+  const delayMedioSeg = (() => {
+    if (contatosEnviados.length < 2) return null;
+    const first = new Date(contatosEnviados[0].atualizado_em).getTime();
+    const last = new Date(contatosEnviados[contatosEnviados.length - 1].atualizado_em).getTime();
+    return Math.round((last - first) / (contatosEnviados.length - 1) / 1000);
+  })();
+
   const acaoComLoading = async (fn: () => Promise<void>) => {
     setLoadingAcao(true);
     try { await fn(); await load(); }
-    catch (e) { toast.error("Erro ao executar ação: " + String(e)); }
+    catch (e) { toast.error("Erro: " + String(e)); }
     finally { setLoadingAcao(false); }
   };
 
   const handleIniciar = () =>
     acaoComLoading(async () => {
-      const { error } = await supabase
-        .from("campanhas")
-        .update({ status: "em_andamento" })
-        .eq("id", id);
+      const { error } = await supabase.from("campanhas").update({ status: "em_andamento" }).eq("id", id);
       if (error) throw error;
       toast.success("Campanha iniciada! O motor processará os contatos em até 1 minuto.");
     });
 
   const handlePausar = () =>
     acaoComLoading(async () => {
-      const { error } = await supabase
-        .from("campanhas")
-        .update({ status: "pausada" })
-        .eq("id", id);
+      const { error } = await supabase.from("campanhas").update({ status: "pausada" }).eq("id", id);
       if (error) throw error;
       toast.success("Campanha pausada.");
     });
 
   const handleRetomar = () =>
     acaoComLoading(async () => {
-      const { error } = await supabase
-        .from("campanhas")
-        .update({ status: "em_andamento" })
-        .eq("id", id);
+      const { error } = await supabase.from("campanhas").update({ status: "em_andamento" }).eq("id", id);
       if (error) throw error;
       toast.success("Campanha retomada.");
     });
@@ -80,15 +120,10 @@ function Detalhes() {
     acaoComLoading(async () => {
       if (!confirm("Cancelar a campanha? Esta ação não pode ser desfeita.")) return;
       const { error: e1 } = await supabase
-        .from("contatos_campanha")
-        .update({ status: "cancelado" })
-        .eq("campanha_id", id)
-        .eq("status", "pendente");
+        .from("contatos_campanha").update({ status: "cancelado" })
+        .eq("campanha_id", id).eq("status", "pendente");
       if (e1) throw e1;
-      const { error: e2 } = await supabase
-        .from("campanhas")
-        .update({ status: "cancelada" })
-        .eq("id", id);
+      const { error: e2 } = await supabase.from("campanhas").update({ status: "cancelada" }).eq("id", id);
       if (e2) throw e2;
       toast.success("Campanha cancelada.");
     });
@@ -115,20 +150,33 @@ function Detalhes() {
 
   const contatoStatusColor: Record<string, string> = {
     pendente: "bg-yellow-100 text-yellow-800",
-    enviado: "bg-green-100 text-green-800",
+    enviado: "bg-blue-100 text-blue-800",
+    entregue: "bg-green-100 text-green-800",
+    lido: "bg-purple-100 text-purple-800",
     invalido: "bg-red-100 text-red-800",
     erro: "bg-red-100 text-red-800",
     cancelado: "bg-muted text-muted-foreground",
   };
 
+  const contatoStatusLabel: Record<string, string> = {
+    pendente: "Pendente",
+    enviado: "Enviado",
+    entregue: "Entregue",
+    lido: "Lido",
+    invalido: "Inválido",
+    erro: "Erro",
+    cancelado: "Cancelado",
+  };
+
   const instanciasNomes: string[] = Array.isArray(camp.instancias_selecionadas)
     ? (camp.instancias_selecionadas as { nome: string }[]).map((i) => i.nome)
-    : camp.instancia_nome
-    ? [camp.instancia_nome]
-    : [];
+    : camp.instancia_nome ? [camp.instancia_nome] : [];
+
+  const pendentes = Math.max(0, camp.total_contatos - camp.enviadas - camp.erros);
 
   return (
     <div className="p-8 space-y-6">
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">{camp.nome}</h1>
@@ -186,7 +234,7 @@ function Detalhes() {
           { l: "Enviadas", v: camp.enviadas },
           { l: "Entregues", v: camp.entregues },
           { l: "Erros / Inválidos", v: camp.erros },
-          { l: "Pendentes", v: Math.max(0, camp.total_contatos - camp.enviadas - camp.erros) },
+          { l: "Pendentes", v: pendentes },
         ].map((s) => (
           <Card key={s.l} className="p-5">
             <div className="text-sm text-muted-foreground">{s.l}</div>
@@ -195,24 +243,48 @@ function Detalhes() {
         ))}
       </div>
 
-      {/* Detalhes da campanha */}
-      <Card className="p-5 space-y-3 text-sm">
-        <h3 className="font-semibold">Configurações</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-muted-foreground">
-          <div><span className="block font-medium text-foreground">Delay</span>{camp.delay_minimo}s – {camp.delay_maximo}s</div>
-          <div><span className="block font-medium text-foreground">Horário</span>{camp.horario_inicio ?? "08:00"} – {camp.horario_fim ?? "22:00"}</div>
-          <div>
-            <span className="block font-medium text-foreground">Instâncias</span>
-            {instanciasNomes.length > 0 ? instanciasNomes.join(", ") : "—"}
+      {/* Configurações + Mídia + Delay médio */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card className="p-5 space-y-3 text-sm">
+          <h3 className="font-semibold">Configurações</h3>
+          <div className="grid grid-cols-2 gap-3 text-muted-foreground">
+            <div>
+              <span className="block font-medium text-foreground">Delay configurado</span>
+              {camp.delay_minimo}s – {camp.delay_maximo}s
+            </div>
+            <div>
+              <span className="block font-medium text-foreground">Delay médio real</span>
+              {delayMedioSeg !== null ? `${delayMedioSeg}s` : "—"}
+            </div>
+            <div>
+              <span className="block font-medium text-foreground">Horário</span>
+              {camp.horario_inicio ?? "08:00"} – {camp.horario_fim ?? "22:00"}
+            </div>
+            <div>
+              <span className="block font-medium text-foreground">Instâncias</span>
+              {instanciasNomes.length > 0 ? instanciasNomes.join(", ") : "—"}
+            </div>
+            <div className="col-span-2">
+              <span className="block font-medium text-foreground">Variações de mensagem</span>
+              {Array.isArray(camp.mensagens_variacoes) && (camp.mensagens_variacoes as string[]).length > 0
+                ? `${(camp.mensagens_variacoes as string[]).length} variação(ões)`
+                : "1 mensagem fixa"}
+            </div>
           </div>
-          <div>
-            <span className="block font-medium text-foreground">Variações de mensagem</span>
-            {Array.isArray(camp.mensagens_variacoes) && (camp.mensagens_variacoes as string[]).length > 0
-              ? `${(camp.mensagens_variacoes as string[]).length} variação(ões)`
-              : "1 mensagem fixa"}
-          </div>
-        </div>
-      </Card>
+        </Card>
+
+        <Card className="p-5 space-y-3 text-sm">
+          <h3 className="font-semibold">Mídia enviada</h3>
+          {camp.midia_url && camp.midia_tipo && camp.midia_nome ? (
+            <MidiaPreview tipo={camp.midia_tipo} url={camp.midia_url} nome={camp.midia_nome} />
+          ) : (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <ImageIcon className="w-4 h-4" />
+              <span>Sem mídia — apenas texto</span>
+            </div>
+          )}
+        </Card>
+      </div>
 
       {/* Tabela de contatos */}
       <Card className="p-0 overflow-hidden">
@@ -223,27 +295,31 @@ function Detalhes() {
               <th>Nome</th>
               <th>Status</th>
               <th>Instância</th>
+              <th>Mensagem enviada</th>
               <th>Atualizado</th>
             </tr>
           </thead>
           <tbody>
             {contatos.map((c) => (
               <tr key={c.id} className="border-b last:border-0">
-                <td className="px-6 py-3">{c.telefone}</td>
+                <td className="px-6 py-3 font-mono text-xs">{c.telefone}</td>
                 <td>{c.nome || "—"}</td>
                 <td>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${contatoStatusColor[c.status] ?? "bg-muted"}`}>
-                    {c.status}
+                    {contatoStatusLabel[c.status] ?? c.status}
                   </span>
                 </td>
                 <td className="text-muted-foreground text-xs">{c.instancia_usada ?? "—"}</td>
+                <td className="text-muted-foreground text-xs max-w-xs truncate" title={c.mensagem_enviada ?? ""}>
+                  {c.mensagem_enviada ?? "—"}
+                </td>
                 <td className="text-muted-foreground text-xs">
                   {new Date(c.atualizado_em).toLocaleString("pt-BR")}
                 </td>
               </tr>
             ))}
             {!contatos.length && (
-              <tr><td colSpan={5} className="p-12 text-center text-muted-foreground">Sem contatos</td></tr>
+              <tr><td colSpan={6} className="p-12 text-center text-muted-foreground">Sem contatos</td></tr>
             )}
           </tbody>
         </table>

@@ -196,6 +196,7 @@ export type Database = {
           id: string
           instancia_usada: string | null
           mensagem_enviada: string | null
+          mensagem_id: string | null
           next_send_at: string | null
           nome: string | null
           status: string
@@ -209,6 +210,7 @@ export type Database = {
           id?: string
           instancia_usada?: string | null
           mensagem_enviada?: string | null
+          mensagem_id?: string | null
           next_send_at?: string | null
           nome?: string | null
           status?: string
@@ -222,6 +224,7 @@ export type Database = {
           id?: string
           instancia_usada?: string | null
           mensagem_enviada?: string | null
+          mensagem_id?: string | null
           next_send_at?: string | null
           nome?: string | null
           status?: string

@@ -161,6 +161,36 @@ serve(async (req) => {
       })
     }
 
+    // --- SET WEBHOOK (configura entrega de ACK para a Edge Function disparo-webhook) ---
+    if (action === 'set_webhook') {
+      const { token } = payload
+      if (!token) throw new Error('Token da instância é obrigatório')
+
+      const WEBHOOK_URL = Deno.env.get('SUPABASE_URL')
+        ? `${Deno.env.get('SUPABASE_URL')}/functions/v1/disparo-webhook`
+        : `${Deno.env.get('SUPABASE_FUNCTIONS_URL') ?? ''}/disparo-webhook`
+
+      const response = await fetch(`${UAZAPI_BASE_URL}/webhook/set`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'token': token,
+        },
+        body: JSON.stringify({
+          webhookUrl: WEBHOOK_URL,
+          enabled: true,
+          events: ['messages.update', 'messages.upsert'],
+        }),
+      })
+
+      // Trata como sucesso mesmo que o endpoint retorne 4xx (nem todas as versões uazapi suportam)
+      const data = response.ok ? await response.json() : { set: false, status: response.status }
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
     throw new Error('Invalid action')
 
   } catch (error) {
