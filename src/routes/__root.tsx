@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "sonner";
 import { BrandingProvider } from "@/lib/branding";
+import { ThemeProvider } from "@/lib/theme";
 import { supabase } from "@/integrations/supabase/client";
 
 function NotFoundComponent() {
@@ -115,6 +116,8 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        {/* Aplica dark class antes de pintar a tela para evitar flash */}
+        <script dangerouslySetInnerHTML={{ __html: `try{if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}` }} />
       </head>
       <body>
         {children}
@@ -140,10 +143,12 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <BrandingProvider>
-        <Outlet />
-        <Toaster position="top-right" richColors />
-      </BrandingProvider>
+      <ThemeProvider>
+        <BrandingProvider>
+          <Outlet />
+          <Toaster position="top-right" richColors />
+        </BrandingProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

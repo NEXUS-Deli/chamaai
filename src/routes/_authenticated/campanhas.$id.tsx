@@ -54,6 +54,9 @@ function Detalhes() {
   const [camp, setCamp] = useState<any>(null);
   const [contatos, setContatos] = useState<any[]>([]);
   const [loadingAcao, setLoadingAcao] = useState(false);
+  const [nextSendAt, setNextSendAt] = useState<string | null>(null);
+  const [lastDispatchAt, setLastDispatchAt] = useState<string | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
   const load = async () => {
     const { data: c } = await supabase.from("campanhas").select("*").eq("id", id).single();
@@ -64,6 +67,24 @@ function Detalhes() {
       .eq("campanha_id", id)
       .order("atualizado_em", { ascending: false });
     setContatos(cs ?? []);
+
+    // Próximo contato agendado (para countdown)
+    const { data: nextPending } = await supabase
+      .from("contatos_campanha")
+      .select("next_send_at")
+      .eq("campanha_id", id)
+      .eq("status", "pendente")
+      .not("next_send_at", "is", null)
+      .order("next_send_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    setNextSendAt(nextPending?.next_send_at ?? null);
+
+    // Último disparo realizado (referência do início do countdown)
+    const lastSent = (cs ?? [])
+      .filter((x: any) => ["enviado", "entregue", "lido"].includes(x.status))
+      .sort((a: any, b: any) => new Date(b.atualizado_em).getTime() - new Date(a.atualizado_em).getTime())[0];
+    setLastDispatchAt(lastSent?.atualizado_em ?? null);
   };
 
   useEffect(() => { load(); }, [id]);
@@ -73,6 +94,19 @@ function Detalhes() {
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [camp?.status, id]);
+
+  // Tick de 1s para atualizar o countdown em tempo real
+  useEffect(() => {
+    if (!nextSendAt || camp?.status !== "em_andamento") {
+      setSecondsLeft(null);
+      return;
+    }
+    const nextTime = new Date(nextSendAt).getTime();
+    const tick = () => setSecondsLeft(Math.max(0, Math.round((nextTime - Date.now()) / 1000)));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [nextSendAt, camp?.status]);
 
   if (!camp) return <div className="p-8">Carregando…</div>;
 
@@ -128,7 +162,25 @@ function Detalhes() {
       toast.success("Campanha cancelada.");
     });
 
-  const pct = camp.total_contatos > 0 ? (camp.enviadas / camp.total_contatos) * 100 : 0;
+  // Derivar contadores do array contatos (mais atualizado que camp.enviadas do DB)
+  const enviadasCount = contatos.filter((c) => ["enviado", "entregue", "lido"].includes(c.status)).length;
+  const entreguesCount = contatos.filter((c) => ["entregue", "lido"].includes(c.status)).length;
+  const errosCount = contatos.filter((c) => ["erro", "invalido"].includes(c.status)).length;
+  const pendentesCount = contatos.filter((c) => c.status === "pendente").length;
+  const totalCount = contatos.length || camp.total_contatos || 0;
+  const pct = totalCount > 0 ? (enviadasCount / totalCount) * 100 : 0;
+
+  // Percentual do countdown: elapsed / total_delay onde total = next_send_at - last_dispatch_at
+  const countdownPct = (() => {
+    if (secondsLeft === null || !nextSendAt) return null;
+    const nextTime = new Date(nextSendAt).getTime();
+    const fromTime = lastDispatchAt
+      ? new Date(lastDispatchAt).getTime()
+      : nextTime - (camp.delay_maximo ?? 15) * 1000;
+    const totalMs = Math.max(1000, nextTime - fromTime);
+    const elapsedMs = totalMs - secondsLeft * 1000;
+    return Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100));
+  })();
 
   const statusLabel: Record<string, string> = {
     aguardando: "Aguardando",
@@ -172,7 +224,6 @@ function Detalhes() {
     ? (camp.instancias_selecionadas as { nome: string }[]).map((i) => i.nome)
     : camp.instancia_nome ? [camp.instancia_nome] : [];
 
-  const pendentes = Math.max(0, camp.total_contatos - camp.enviadas - camp.erros);
 
   return (
     <div className="p-8 space-y-6">
@@ -223,22 +274,47 @@ function Detalhes() {
       <Card className="p-6 space-y-3">
         <div className="flex justify-between text-sm">
           <span>Progresso</span>
-          <span>{camp.enviadas}/{camp.total_contatos}</span>
+          <span>{enviadasCount}/{totalCount}</span>
         </div>
         <Progress value={pct} />
+
+        {/* Countdown do próximo disparo */}
+        {camp.status === "em_andamento" && pendentesCount > 0 && (
+          <div className="pt-2 space-y-1.5">
+            {secondsLeft !== null && secondsLeft > 0 ? (
+              <>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Próximo disparo em</span>
+                  <span className="tabular-nums font-semibold text-primary">{secondsLeft}s</span>
+                </div>
+                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-primary/15">
+                  <div
+                    className="h-full rounded-full bg-primary transition-none"
+                    style={{ width: `${countdownPct ?? 0}%` }}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                <span>Disparando agora…</span>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { l: "Enviadas", v: camp.enviadas },
-          { l: "Entregues", v: camp.entregues },
-          { l: "Erros / Inválidos", v: camp.erros },
-          { l: "Pendentes", v: pendentes },
+          { l: "Enviadas", v: enviadasCount },
+          { l: "Entregues", v: entreguesCount },
+          { l: "Erros / Inválidos", v: errosCount },
+          { l: "Pendentes", v: pendentesCount },
         ].map((s) => (
           <Card key={s.l} className="p-5">
             <div className="text-sm text-muted-foreground">{s.l}</div>
-            <div className="text-2xl font-bold">{Math.max(0, s.v)}</div>
+            <div className="text-2xl font-bold">{s.v}</div>
           </Card>
         ))}
       </div>
