@@ -1,20 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Folder, Plus, Trash2, Upload, Download, UserPlus, Search } from "lucide-react";
+import { Folder, Plus, Trash2, Upload, Download, UserPlus, Search, X, CheckSquare, Tag, History, Loader2 } from "lucide-react";
 import { isValidPhone, formatPhoneBR } from "@/lib/phone";
 import { parseCSV, downloadCSV, templateLeadsCSV } from "@/lib/csv";
 
@@ -30,33 +23,52 @@ interface Lead {
   empresa: string | null;
   pasta_id: string | null;
   importado_em: string;
+  tags: string[];
+}
+
+interface Disparo {
+  id: string;
+  telefone: string;
+  status: string;
+  instancia_usada: string | null;
+  mensagem_enviada: string | null;
+  atualizado_em: string;
+  campanhas: { id: string; nome: string } | null;
 }
 
 function LeadsPage() {
   const [pastas, setPastas] = useState<Pasta[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [pastaSel, setPastaSel] = useState<string | null>(null); // null = todos
+  const [pastaSel, setPastaSel] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [novaPasta, setNovaPasta] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [excluindoMassa, setExcluindoMassa] = useState(false);
+  const [tagsLead, setTagsLead] = useState<Lead | null>(null);
+  const [historicoLead, setHistoricoLead] = useState<Lead | null>(null);
 
   const load = async () => {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
     const [{ data: ps }, { data: ls }] = await Promise.all([
       supabase.from("pastas").select("id,nome,codigo").eq("usuario_id", u.user.id).order("nome"),
-      supabase
+      (supabase as any)
         .from("leads")
-        .select("id,telefone,nome,empresa,pasta_id,importado_em")
+        .select("id,telefone,nome,empresa,pasta_id,importado_em,tags")
         .eq("usuario_id", u.user.id)
         .order("importado_em", { ascending: false }),
     ]);
     setPastas(ps ?? []);
-    setLeads(ls ?? []);
+    setLeads(((ls ?? []) as Lead[]).map((l) => ({ ...l, tags: l.tags ?? [] })));
+    setSelecionados(new Set());
   };
 
   useEffect(() => { load(); }, []);
+
+  // Limpa seleção ao trocar filtro
+  useEffect(() => { setSelecionados(new Set()); }, [pastaSel, search]);
 
   const criarPasta = async () => {
     if (!novaPasta.trim()) return;
@@ -83,13 +95,30 @@ function LeadsPage() {
     load();
   };
 
+  const excluirSelecionados = async () => {
+    if (!selecionados.size) return;
+    if (!confirm(`Excluir ${selecionados.size} contato(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+    setExcluindoMassa(true);
+    try {
+      const ids = [...selecionados];
+      // Supabase limita .in() — divide em lotes de 200
+      for (let i = 0; i < ids.length; i += 200) {
+        const lote = ids.slice(i, i + 200);
+        const { error } = await supabase.from("leads").delete().in("id", lote);
+        if (error) throw error;
+      }
+      toast.success(`${ids.length} contato(s) excluído(s)`);
+      load();
+    } catch (e) {
+      toast.error("Erro ao excluir: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setExcluindoMassa(false);
+    }
+  };
+
   const leadsCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    leads.forEach((l) => {
-      if (l.pasta_id) {
-        counts[l.pasta_id] = (counts[l.pasta_id] || 0) + 1;
-      }
-    });
+    leads.forEach((l) => { if (l.pasta_id) counts[l.pasta_id] = (counts[l.pasta_id] || 0) + 1; });
     return counts;
   }, [leads]);
 
@@ -106,15 +135,37 @@ function LeadsPage() {
     });
   }, [leads, pastaSel, search]);
 
-  const countPorPasta = (id: string | null) => {
-    if (id === null) return leads.length;
-    return leadsCounts[id] || 0;
-  };
+  const countPorPasta = (id: string | null) => id === null ? leads.length : (leadsCounts[id] || 0);
 
   const exportar = () =>
-    downloadCSV("leads.csv", filtered.map((l) => ({
-      telefone: l.telefone, nome: l.nome ?? "", empresa: l.empresa ?? "",
-    })));
+    downloadCSV("leads.csv", filtered.map((l) => ({ telefone: l.telefone, nome: l.nome ?? "", empresa: l.empresa ?? "" })));
+
+  const todosSelecionados = filtered.length > 0 && filtered.every((l) => selecionados.has(l.id));
+  const algunsSelecionados = filtered.some((l) => selecionados.has(l.id));
+
+  const toggleTodos = () => {
+    if (todosSelecionados) {
+      setSelecionados((prev) => {
+        const next = new Set(prev);
+        filtered.forEach((l) => next.delete(l.id));
+        return next;
+      });
+    } else {
+      setSelecionados((prev) => {
+        const next = new Set(prev);
+        filtered.forEach((l) => next.add(l.id));
+        return next;
+      });
+    }
+  };
+
+  const toggleLead = (id: string) => {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div className="flex h-screen">
@@ -140,7 +191,6 @@ function LeadsPage() {
                 className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-md text-sm ${
                   pastaSel === p.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"
                 }`}
-                title={`ID: ${p.id}`}
               >
                 <span className="flex items-center gap-2 truncate min-w-0">
                   <Folder className="w-4 h-4 shrink-0" />
@@ -176,10 +226,16 @@ function LeadsPage() {
 
       {/* Tabela */}
       <section className="flex-1 flex flex-col overflow-hidden">
-        <div className="p-6 border-b bg-background flex items-center gap-3 flex-wrap">
+        {/* Header */}
+        <div className="p-4 border-b bg-background flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-            <Input placeholder="Buscar por nome, telefone, empresa..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            <Input
+              placeholder="Buscar por nome, telefone, empresa..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
           </div>
           <Button variant="outline" onClick={() => setShowImport(true)}><Upload className="w-4 h-4 mr-2" />Importar CSV</Button>
           <Button variant="outline" onClick={() => setShowAdd(true)}><UserPlus className="w-4 h-4 mr-2" />Adicionar</Button>
@@ -187,35 +243,121 @@ function LeadsPage() {
           <span className="text-sm text-muted-foreground">{filtered.length} contatos</span>
         </div>
 
+        {/* Barra de seleção em massa */}
+        {selecionados.size > 0 && (
+          <div className="px-4 py-2.5 bg-primary/5 border-b border-primary/20 flex items-center gap-3">
+            <CheckSquare className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-sm font-medium text-primary flex-1">
+              {selecionados.size} contato{selecionados.size !== 1 ? "s" : ""} selecionado{selecionados.size !== 1 ? "s" : ""}
+            </span>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={excluirSelecionados}
+              disabled={excluindoMassa}
+              className="gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {excluindoMassa ? "Excluindo…" : `Excluir ${selecionados.size}`}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelecionados(new Set())}
+              className="gap-1.5 text-muted-foreground"
+            >
+              <X className="w-3.5 h-3.5" /> Cancelar
+            </Button>
+          </div>
+        )}
+
         <div className="flex-1 overflow-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground border-b sticky top-0 bg-background">
+            <thead className="text-left text-muted-foreground border-b sticky top-0 bg-background z-10">
               <tr>
-                <th className="px-6 py-3">Nome</th><th>Telefone</th><th>Empresa</th><th>Importado</th><th></th>
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={todosSelecionados}
+                    ref={(el) => { if (el) el.indeterminate = algunsSelecionados && !todosSelecionados; }}
+                    onChange={toggleTodos}
+                    className="accent-primary cursor-pointer"
+                    title={todosSelecionados ? "Desmarcar todos" : "Selecionar todos"}
+                  />
+                </th>
+                <th className="py-3">Nome</th>
+                <th className="py-3">Telefone</th>
+                <th className="py-3 hidden md:table-cell">Empresa</th>
+                <th className="py-3 hidden lg:table-cell">Tags</th>
+                <th className="py-3 hidden md:table-cell">Importado</th>
+                <th className="py-3 w-20"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((l) => {
                 const valido = isValidPhone(l.telefone);
+                const sel = selecionados.has(l.id);
                 return (
-                  <tr key={l.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="px-6 py-3 font-medium">{l.nome || "—"}</td>
-                    <td>
-                      {formatPhoneBR(l.telefone)}
-                      {!valido && <span className="ml-2 px-1.5 py-0.5 rounded bg-destructive/10 text-destructive text-xs">inválido</span>}
+                  <tr
+                    key={l.id}
+                    onClick={() => toggleLead(l.id)}
+                    className={`border-b last:border-0 cursor-pointer transition-colors ${
+                      sel ? "bg-primary/5 hover:bg-primary/8" : "hover:bg-muted/30"
+                    }`}
+                  >
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={sel}
+                        onChange={() => toggleLead(l.id)}
+                        className="accent-primary cursor-pointer"
+                      />
                     </td>
-                    <td className="text-muted-foreground">{l.empresa || "—"}</td>
-                    <td className="text-muted-foreground">{new Date(l.importado_em).toLocaleDateString("pt-BR")}</td>
-                    <td>
-                      <Button variant="ghost" size="sm" onClick={() => excluirLead(l.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                    <td className="py-3 font-medium">{l.nome || "—"}</td>
+                    <td className="py-3">
+                      {formatPhoneBR(l.telefone)}
+                      {!valido && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded bg-destructive/10 text-destructive text-xs">inválido</span>
+                      )}
+                    </td>
+                    <td className="py-3 text-muted-foreground hidden md:table-cell">{l.empresa || "—"}</td>
+                    <td className="py-3 hidden lg:table-cell" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-wrap gap-1">
+                        {(l.tags ?? []).slice(0, 3).map((tag) => (
+                          <span key={tag} className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-medium">
+                            {tag}
+                          </span>
+                        ))}
+                        {(l.tags ?? []).length > 3 && (
+                          <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px]">
+                            +{l.tags.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 text-muted-foreground hidden md:table-cell">
+                      {new Date(l.importado_em).toLocaleDateString("pt-BR")}
+                    </td>
+                    <td className="py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center">
+                        <Button variant="ghost" size="sm" onClick={() => setTagsLead(l)} title="Gerenciar tags" className="text-muted-foreground hover:text-primary">
+                          <Tag className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setHistoricoLead(l)} title="Histórico de disparos" className="text-muted-foreground hover:text-blue-600">
+                          <History className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => excluirLead(l.id)} className="text-muted-foreground hover:text-destructive">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );
               })}
               {!filtered.length && (
-                <tr><td colSpan={5} className="p-12 text-center text-muted-foreground">Nenhum contato</td></tr>
+                <tr>
+                  <td colSpan={6} className="p-12 text-center text-muted-foreground">Nenhum contato</td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -224,6 +366,19 @@ function LeadsPage() {
 
       <ImportModal open={showImport} onClose={() => setShowImport(false)} pastas={pastas} onDone={load} />
       <AddModal open={showAdd} onClose={() => setShowAdd(false)} pastas={pastas} onDone={load} pastaAtual={pastaSel} />
+      {tagsLead && (
+        <TagsModal
+          lead={tagsLead}
+          onClose={() => setTagsLead(null)}
+          onSalvo={(novasTags: string[]) => {
+            setLeads((prev) => prev.map((l) => l.id === tagsLead.id ? { ...l, tags: novasTags } : l));
+            setTagsLead(null);
+          }}
+        />
+      )}
+      {historicoLead && (
+        <HistoricoModal lead={historicoLead} onClose={() => setHistoricoLead(null)} />
+      )}
     </div>
   );
 }
@@ -339,6 +494,164 @@ function AddModal({ open, onClose, pastas, onDone, pastaAtual }: { open: boolean
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button onClick={salvar}>Salvar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TagsModal({ lead, onClose, onSalvo }: { lead: Lead; onClose: () => void; onSalvo: (tags: string[]) => void }) {
+  const [tags, setTags] = useState<string[]>(lead.tags ?? []);
+  const [input, setInput] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const addTag = () => {
+    const t = input.trim().toLowerCase();
+    if (!t || tags.includes(t)) { setInput(""); return; }
+    setTags((prev) => [...prev, t]);
+    setInput("");
+  };
+
+  const removeTag = (t: string) => setTags((prev) => prev.filter((x) => x !== t));
+
+  const salvar = async () => {
+    setSalvando(true);
+    const { error } = await (supabase as any).from("leads").update({ tags }).eq("id", lead.id);
+    setSalvando(false);
+    if (error) return toast.error(error.message);
+    toast.success("Tags salvas");
+    onSalvo(tags);
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Tag className="w-4 h-4" /> Tags — {lead.nome || lead.telefone}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Nova tag..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addTag()}
+              className="flex-1"
+            />
+            <Button variant="outline" onClick={addTag}>Adicionar</Button>
+          </div>
+          {tags.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {tags.map((t) => (
+                <span key={t} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                  {t}
+                  <button onClick={() => removeTag(t)} className="hover:text-destructive transition-colors">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Nenhuma tag. Digite acima e pressione Enter.</p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={salvar} disabled={salvando} className="gap-2">
+            {salvando && <Loader2 className="w-4 h-4 animate-spin" />} Salvar tags
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const DISPARO_STATUS_COLOR: Record<string, string> = {
+  pendente: "bg-yellow-100 text-yellow-800",
+  enviado: "bg-blue-100 text-blue-800",
+  entregue: "bg-green-100 text-green-800",
+  lido: "bg-purple-100 text-purple-800",
+  invalido: "bg-red-100 text-red-800",
+  erro: "bg-red-100 text-red-800",
+  cancelado: "bg-muted text-muted-foreground",
+};
+
+const DISPARO_STATUS_LABEL: Record<string, string> = {
+  pendente: "Pendente", enviado: "Enviado", entregue: "Entregue",
+  lido: "Lido", invalido: "Inválido", erro: "Erro", cancelado: "Cancelado",
+};
+
+function HistoricoModal({ lead, onClose }: { lead: Lead; onClose: () => void }) {
+  const [disparos, setDisparos] = useState<Disparo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("contatos_campanha")
+        .select("id,telefone,status,instancia_usada,mensagem_enviada,atualizado_em,campanhas(id,nome)")
+        .eq("telefone", lead.telefone)
+        .order("atualizado_em", { ascending: false })
+        .limit(50);
+      setDisparos((data ?? []) as unknown as Disparo[]);
+      setLoading(false);
+    })();
+  }, [lead.telefone]);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <History className="w-4 h-4" /> Histórico — {lead.nome || formatPhoneBR(lead.telefone)}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : disparos.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-12">
+              Nenhum disparo encontrado para este contato.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground border-b sticky top-0 bg-background">
+                <tr>
+                  <th className="py-2 pr-4">Campanha</th>
+                  <th className="py-2 pr-4">Status</th>
+                  <th className="py-2 pr-4 hidden sm:table-cell">Instância</th>
+                  <th className="py-2 hidden md:table-cell">Mensagem</th>
+                  <th className="py-2">Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {disparos.map((d) => (
+                  <tr key={d.id} className="border-b last:border-0">
+                    <td className="py-2 pr-4 font-medium">{d.campanhas?.nome ?? "—"}</td>
+                    <td className="py-2 pr-4">
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${DISPARO_STATUS_COLOR[d.status] ?? "bg-muted"}`}>
+                        {DISPARO_STATUS_LABEL[d.status] ?? d.status}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-4 text-muted-foreground text-xs hidden sm:table-cell">{d.instancia_usada ?? "—"}</td>
+                    <td className="py-2 text-muted-foreground text-xs max-w-[200px] truncate hidden md:table-cell" title={d.mensagem_enviada ?? ""}>
+                      {d.mensagem_enviada ?? "—"}
+                    </td>
+                    <td className="py-2 text-muted-foreground text-xs whitespace-nowrap">
+                      {new Date(d.atualizado_em).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Fechar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

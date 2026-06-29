@@ -11,7 +11,7 @@ interface Branding {
 const defaults: Branding = {
   nome_produto: "Chama AI Delivery",
   cor_primaria: "#FF5C00",
-  logo_url: "",
+  logo_url: "/logo.png",
 };
 
 const Ctx = createContext<{ branding: Branding; refresh: () => void }>({
@@ -40,7 +40,13 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return defaults;
     try {
       const cached = localStorage.getItem("chama:branding");
-      return cached ? { ...defaults, ...JSON.parse(cached) } : defaults;
+      if (!cached) return defaults;
+      const parsed = JSON.parse(cached) as Partial<Branding>;
+      return {
+        ...defaults,
+        ...parsed,
+        logo_url: parsed.logo_url || defaults.logo_url,
+      };
     } catch {
       return defaults;
     }
@@ -66,7 +72,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       const next = {
         nome_produto: data.nome_produto || defaults.nome_produto,
         cor_primaria: data.cor_primaria || defaults.cor_primaria,
-        logo_url: data.logo_url || "",
+        logo_url: data.logo_url || defaults.logo_url,
       };
       setBranding(next);
       try {

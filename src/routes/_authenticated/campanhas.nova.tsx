@@ -8,10 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  Loader2, ChevronRight, UploadCloud, X, Plus, Trash2, FileText,
+  Loader2, ChevronRight, UploadCloud, X, Plus, Trash2, FileText, Layers,
 } from "lucide-react";
 import { isValidPhone, toE164BR } from "@/lib/phone";
 import { parseCSV } from "@/lib/csv";
@@ -86,6 +86,7 @@ function NovaCampanha() {
   const [contatosCSV, setContatosCSV] = useState<Contato[]>([]);
   const [origem, setOrigem] = useState<"csv" | "lista">("csv");
   const [loading, setLoading] = useState(false);
+  const [templateModal, setTemplateModal] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -349,13 +350,18 @@ function NovaCampanha() {
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <Label>
                   Variações de mensagem <span className="text-xs text-muted-foreground">(o sistema sorteia uma por envio)</span>
                 </Label>
-                <Button type="button" variant="outline" size="sm" onClick={adicionarVariacao}>
-                  <Plus className="w-3 h-3 mr-1" /> Adicionar variação
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setTemplateModal(true)} className="gap-1.5">
+                    <Layers className="w-3 h-3" /> Carregar do template
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={adicionarVariacao}>
+                    <Plus className="w-3 h-3 mr-1" /> Adicionar variação
+                  </Button>
+                </div>
               </div>
 
               {mensagensVariacoes.length === 0 && (
@@ -585,6 +591,160 @@ function NovaCampanha() {
           </Button>
         )}
       </div>
+
+      <LoadTemplateModal
+        open={templateModal}
+        onClose={() => setTemplateModal(false)}
+        onCarregar={(msgs) => {
+          setMensagensVariacoes(msgs);
+          setTemplateModal(false);
+          toast.success(`${msgs.length} variação(ões) carregada(s) do template!`);
+        }}
+      />
     </div>
+  );
+}
+
+interface TemplateItem {
+  id: string;
+  nome: string;
+  mensagem: string;
+  variacoes: string[];
+}
+
+function LoadTemplateModal({
+  open, onClose, onCarregar,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCarregar: (msgs: string[]) => void;
+}) {
+  const [templates, setTemplates] = useState<TemplateItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selecionado, setSelecionado] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    setSelecionado(null);
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      const { data } = await (supabase as any)
+        .from("message_templates")
+        .select("id,nome,mensagem,variacoes")
+        .eq("usuario_id", u.user.id)
+        .order("atualizado_em", { ascending: false });
+      setTemplates(((data ?? []) as TemplateItem[]).map((t) => ({ ...t, variacoes: t.variacoes ?? [] })));
+      setLoading(false);
+    })();
+  }, [open]);
+
+  const confirmar = () => {
+    const t = templates.find((x) => x.id === selecionado);
+    if (!t) return;
+    const msgs = t.variacoes.length > 0 ? t.variacoes : [t.mensagem];
+    onCarregar(msgs.filter(Boolean));
+  };
+
+  const packs = templates.filter((t) => t.variacoes.length > 0);
+  const singles = templates.filter((t) => t.variacoes.length === 0);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="w-5 h-5 text-primary" /> Carregar variações do template
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Selecione um template — suas mensagens substituirão as variações atuais.
+          </p>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto space-y-4 py-2">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : templates.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-8">
+              Nenhum template encontrado. Crie um em <strong>Templates</strong>.
+            </p>
+          ) : (
+            <>
+              {packs.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Packs de variações</p>
+                  {packs.map((t) => (
+                    <label
+                      key={t.id}
+                      className={`flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${
+                        selecionado === t.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="template"
+                        value={t.id}
+                        checked={selecionado === t.id}
+                        onChange={() => setSelecionado(t.id)}
+                        className="accent-primary mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{t.nome}</span>
+                          <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-semibold">
+                            {t.variacoes.length} msgs
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{t.variacoes[0]}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {singles.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Mensagens individuais</p>
+                  {singles.map((t) => (
+                    <label
+                      key={t.id}
+                      className={`flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${
+                        selecionado === t.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="template"
+                        value={t.id}
+                        checked={selecionado === t.id}
+                        onChange={() => setSelecionado(t.id)}
+                        className="accent-primary mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-sm">{t.nome}</span>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{t.mensagem}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={confirmar} disabled={!selecionado} className="gap-2">
+            <Layers className="w-4 h-4" />
+            {selecionado
+              ? `Carregar ${(() => { const t = templates.find((x) => x.id === selecionado); return t?.variacoes.length ? `${t.variacoes.length} variações` : "1 variação"; })()}`
+              : "Selecione um template"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

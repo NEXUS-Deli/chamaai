@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Pause, Play, X, Loader2, FileText, ImageIcon, Video } from "lucide-react";
+import { Pause, Play, X, Loader2, FileText, ImageIcon, Video, Download, Filter } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/campanhas/$id")({
@@ -57,6 +57,7 @@ function Detalhes() {
   const [nextSendAt, setNextSendAt] = useState<string | null>(null);
   const [lastDispatchAt, setLastDispatchAt] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [filtroStatus, setFiltroStatus] = useState<string>("todos");
 
   const load = async () => {
     const { data: c } = await supabase.from("campanhas").select("*").eq("id", id).single();
@@ -224,6 +225,22 @@ function Detalhes() {
     ? (camp.instancias_selecionadas as { nome: string }[]).map((i) => i.nome)
     : camp.instancia_nome ? [camp.instancia_nome] : [];
 
+  const contatosFiltrados = filtroStatus === "todos"
+    ? contatos
+    : contatos.filter((c) => c.status === filtroStatus);
+
+  const exportarCSV = () => {
+    const header = "telefone,nome,status,instancia,mensagem,atualizado_em";
+    const rows = contatosFiltrados.map((c) =>
+      [c.telefone, c.nome ?? "", c.status, c.instancia_usada ?? "", `"${(c.mensagem_enviada ?? "").replace(/"/g, '""')}"`, c.atualizado_em].join(",")
+    );
+    const csv = [header, ...rows].join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `campanha-${camp.nome.replace(/\s+/g, "-")}.csv`;
+    a.click();
+  };
+
 
   return (
     <div className="p-8 space-y-6">
@@ -383,6 +400,27 @@ function Detalhes() {
 
       {/* Tabela de contatos */}
       <Card className="p-0 overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-3 border-b flex-wrap">
+          <div className="flex items-center gap-2 flex-1 flex-wrap">
+            <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
+            {["todos","pendente","enviado","entregue","lido","erro","invalido","cancelado"].map((s) => (
+              <button
+                key={s}
+                onClick={() => setFiltroStatus(s)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  filtroStatus === s
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                {s === "todos" ? `Todos (${contatos.length})` : `${contatoStatusLabel[s] ?? s} (${contatos.filter((c) => c.status === s).length})`}
+              </button>
+            ))}
+          </div>
+          <Button variant="outline" size="sm" onClick={exportarCSV} className="gap-2 shrink-0">
+            <Download className="w-4 h-4" /> Exportar CSV
+          </Button>
+        </div>
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground border-b">
             <tr>
@@ -395,7 +433,7 @@ function Detalhes() {
             </tr>
           </thead>
           <tbody>
-            {contatos.map((c) => (
+            {contatosFiltrados.map((c) => (
               <tr key={c.id} className="border-b last:border-0">
                 <td className="px-6 py-3 font-mono text-xs">{c.telefone}</td>
                 <td>{c.nome || "—"}</td>
@@ -413,8 +451,10 @@ function Detalhes() {
                 </td>
               </tr>
             ))}
-            {!contatos.length && (
-              <tr><td colSpan={6} className="p-12 text-center text-muted-foreground">Sem contatos</td></tr>
+            {!contatosFiltrados.length && (
+              <tr><td colSpan={6} className="p-12 text-center text-muted-foreground">
+                {filtroStatus === "todos" ? "Sem contatos" : "Nenhum contato com este status"}
+              </td></tr>
             )}
           </tbody>
         </table>

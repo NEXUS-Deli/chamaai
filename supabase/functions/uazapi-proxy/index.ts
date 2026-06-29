@@ -266,6 +266,240 @@ serve(async (req) => {
       })
     }
 
+    // --- CHECK NUMBERS (verifica se números têm WhatsApp) ---
+    if (action === 'check_numbers') {
+      const { token, numbers } = payload
+      if (!token) throw new Error('Token da instância é obrigatório')
+      if (!Array.isArray(numbers) || !numbers.length) throw new Error('Lista de números é obrigatória')
+
+      const response = await fetch(`${UAZAPI_BASE_URL}/chat/check`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'token': token,
+        },
+        body: JSON.stringify({ numbers }),
+      })
+
+      const rawText = await response.text()
+      let data: unknown
+      try { data = JSON.parse(rawText) } catch { data = { error: rawText } }
+
+      if (!response.ok) {
+        const errMsg = (data as Record<string, string>)?.error
+          || (data as Record<string, string>)?.message
+          || `Erro ${response.status} da API Uazapi`
+        console.error('[uazapi-proxy] check_numbers error:', response.status, rawText)
+        throw new Error(errMsg)
+      }
+
+      console.log(`[uazapi-proxy] check_numbers OK — ${Array.isArray(data) ? data.length : 1} resultado(s)`)
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    // --- GET CONTACTS (lista contatos da instância) ---
+    if (action === 'get_contacts') {
+      const { token, contactScope } = payload
+      if (!token) throw new Error('Token é obrigatório')
+
+      const scope = contactScope || 'address_book'
+      const url = `${UAZAPI_BASE_URL}/contacts?contactScope=${scope}`
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json', 'token': token },
+      })
+
+      const rawText = await response.text()
+      let data: unknown
+      try { data = JSON.parse(rawText) } catch { data = [] }
+
+      if (!response.ok) {
+        const errMsg = (data as Record<string, string>)?.error
+          || (data as Record<string, string>)?.message
+          || `Erro ${response.status} da API Uazapi`
+        console.error('[uazapi-proxy] get_contacts error:', response.status, rawText)
+        throw new Error(errMsg)
+      }
+
+      const list = Array.isArray(data) ? data : (data as Record<string, unknown>)?.contacts ?? (data as Record<string, unknown>)?.data ?? []
+      console.log(`[uazapi-proxy] get_contacts OK — ${(list as unknown[]).length} contato(s), scope=${scope}`)
+      return new Response(JSON.stringify(list), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    // --- GET GROUPS (lista grupos da instância via GET /group/list) ---
+    if (action === 'get_groups') {
+      const { token } = payload
+      if (!token) throw new Error('Token é obrigatório')
+
+      const response = await fetch(`${UAZAPI_BASE_URL}/group/list`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json', 'token': token },
+      })
+
+      const rawText = await response.text()
+      let data: unknown
+      try { data = JSON.parse(rawText) } catch { data = {} }
+
+      if (!response.ok) {
+        const errMsg = (data as Record<string, string>)?.error || `Erro ${response.status}`
+        throw new Error(errMsg)
+      }
+
+      // API retorna { groups: [{ JID, Name, Size?, ... }] }
+      type RawGroup = Record<string, unknown>
+      const rawGroups: RawGroup[] = Array.isArray(data)
+        ? data
+        : ((data as Record<string, unknown>)?.groups as RawGroup[]) ?? []
+
+      const groups = rawGroups
+        .map((g) => ({
+          id:      String(g.JID ?? g.jid ?? g.id ?? ''),
+          subject: String(g.Name ?? g.name ?? g.subject ?? 'Grupo sem nome'),
+          size:    Number(g.Size ?? g.size ?? g.participantsCount ?? 0) || null,
+        }))
+        .filter((g) => g.id && g.id.includes('@g.us'))
+
+      console.log(`[uazapi-proxy] get_groups OK — ${groups.length} grupo(s)`)
+      return new Response(JSON.stringify(groups), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    // --- GET GROUP MEMBERS (extrai membros via POST /group/info) ---
+    if (action === 'get_group_members') {
+      const { token, groupId } = payload
+      if (!token) throw new Error('Token é obrigatório')
+      if (!groupId) throw new Error('groupId é obrigatório')
+
+      const response = await fetch(`${UAZAPI_BASE_URL}/group/info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'token': token },
+        body: JSON.stringify({ groupjid: groupId, getInviteLink: false, getRequestsParticipants: false, force: false }),
+      })
+
+      const rawText = await response.text()
+      let data: unknown
+      try { data = JSON.parse(rawText) } catch { data = {} }
+
+      if (!response.ok) {
+        const errMsg = (data as Record<string, string>)?.error || `Erro ${response.status}`
+        throw new Error(errMsg)
+      }
+
+      // API retorna array ou objeto único
+      type RawParticipant = Record<string, unknown>
+      const grupo = Array.isArray(data) ? (data as Record<string, unknown>[])[0] : (data as Record<string, unknown>)
+      const rawParticipants: RawParticipant[] =
+        (grupo?.Participants ?? grupo?.participants ?? []) as RawParticipant[]
+
+      const members = rawParticipants
+        .map((p) => {
+          const jid = String(p.JID ?? p.jid ?? '')
+          const phone = String(p.PhoneNumber ?? p.phoneNumber ?? jid.split('@')[0] ?? '')
+          return {
+            id:     jid,
+            number: phone,
+            name:   (p.DisplayName ?? p.displayName ?? p.name ?? null) as string | null,
+            admin:  !!(p.IsAdmin ?? p.isAdmin ?? p.IsSuperAdmin ?? p.isSuperAdmin),
+          }
+        })
+        .filter((m) => m.id && !m.id.includes('@g.us') && !m.id.includes('@broadcast'))
+
+      console.log(`[uazapi-proxy] get_group_members OK — ${members.length} membro(s) em ${groupId}`)
+      return new Response(JSON.stringify(members), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    // --- SEND STATUS / STORY (posta story no WhatsApp) ---
+    if (action === 'send_status') {
+      const { token, type, text, background_color, font, file, mimetype, legenda, max_recipients, recipients } = payload
+      if (!token) throw new Error('Token da instância é obrigatório')
+      if (!type) throw new Error('Tipo é obrigatório (text, image, video)')
+
+      const body: Record<string, unknown> = { type }
+
+      if (type === 'text') {
+        body.text = text ?? ''
+        if (background_color !== undefined) body.background_color = background_color
+        if (font !== undefined) body.font = font
+      } else {
+        if (!file) throw new Error('Campo file é obrigatório para imagem/vídeo')
+        body.file = file
+        if (mimetype) body.mimetype = mimetype
+        if (legenda) body.text = legenda
+      }
+
+      if (max_recipients !== undefined && max_recipients !== null) body.max_recipients = max_recipients
+      if (Array.isArray(recipients) && recipients.length) body.recipients = recipients
+
+      const response = await fetch(`${UAZAPI_BASE_URL}/send/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'token': token },
+        body: JSON.stringify(body),
+      })
+
+      const rawText = await response.text()
+      let data: unknown
+      try { data = JSON.parse(rawText) } catch { data = { raw: rawText } }
+
+      if (!response.ok) {
+        const errMsg = (data as Record<string, string>)?.error || `Erro ${response.status}`
+        throw new Error(errMsg)
+      }
+
+      console.log(`[uazapi-proxy] send_status OK (${type})`)
+      return new Response(JSON.stringify({ ok: true, ...(data as object) }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    // --- ADD CONTACT (adiciona contato à agenda do WhatsApp) ---
+    if (action === 'add_contact') {
+      const { token, number, name } = payload
+      if (!token) throw new Error('Token da instância é obrigatório')
+      if (!number) throw new Error('Número é obrigatório')
+      if (!name) throw new Error('Nome é obrigatório')
+
+      const response = await fetch(`${UAZAPI_BASE_URL}/contact/add`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'token': token,
+        },
+        body: JSON.stringify({ number, name }),
+      })
+
+      const rawText = await response.text()
+      let data: unknown
+      try { data = JSON.parse(rawText) } catch { data = { raw: rawText } }
+
+      if (!response.ok) {
+        const errMsg = (data as Record<string, string>)?.error
+          || (data as Record<string, string>)?.message
+          || `Erro ${response.status}`
+        throw new Error(errMsg)
+      }
+
+      console.log(`[uazapi-proxy] add_contact OK — ${name} (${number})`)
+      return new Response(JSON.stringify({ ok: true, ...(data as object) }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
     throw new Error('Invalid action')
 
   } catch (error) {

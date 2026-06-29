@@ -12,10 +12,17 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
+import { Route as AuthenticatedStoriesRouteImport } from './routes/_authenticated/stories'
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
+import { Route as AuthenticatedFerramentasIndexRouteImport } from './routes/_authenticated/ferramentas.index'
 import { Route as AuthenticatedCampanhasIndexRouteImport } from './routes/_authenticated/campanhas.index'
+import { Route as AuthenticatedFerramentasVerificadorRouteImport } from './routes/_authenticated/ferramentas.verificador'
+import { Route as AuthenticatedFerramentasImportadorRouteImport } from './routes/_authenticated/ferramentas.importador'
+import { Route as AuthenticatedFerramentasExtratorRouteImport } from './routes/_authenticated/ferramentas.extrator'
+import { Route as AuthenticatedFerramentasBlacklistRouteImport } from './routes/_authenticated/ferramentas.blacklist'
 import { Route as AuthenticatedCampanhasNovaRouteImport } from './routes/_authenticated/campanhas.nova'
 import { Route as AuthenticatedCampanhasIdRouteImport } from './routes/_authenticated/campanhas.$id'
 
@@ -33,6 +40,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedTemplatesRoute = AuthenticatedTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedStoriesRoute = AuthenticatedStoriesRouteImport.update({
+  id: '/stories',
+  path: '/stories',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
   id: '/leads',
   path: '/leads',
@@ -49,10 +66,40 @@ const AuthenticatedConfiguracoesRoute =
     path: '/configuracoes',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedFerramentasIndexRoute =
+  AuthenticatedFerramentasIndexRouteImport.update({
+    id: '/ferramentas/',
+    path: '/ferramentas/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCampanhasIndexRoute =
   AuthenticatedCampanhasIndexRouteImport.update({
     id: '/campanhas/',
     path: '/campanhas/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFerramentasVerificadorRoute =
+  AuthenticatedFerramentasVerificadorRouteImport.update({
+    id: '/ferramentas/verificador',
+    path: '/ferramentas/verificador',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFerramentasImportadorRoute =
+  AuthenticatedFerramentasImportadorRouteImport.update({
+    id: '/ferramentas/importador',
+    path: '/ferramentas/importador',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFerramentasExtratorRoute =
+  AuthenticatedFerramentasExtratorRouteImport.update({
+    id: '/ferramentas/extrator',
+    path: '/ferramentas/extrator',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFerramentasBlacklistRoute =
+  AuthenticatedFerramentasBlacklistRouteImport.update({
+    id: '/ferramentas/blacklist',
+    path: '/ferramentas/blacklist',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedCampanhasNovaRoute =
@@ -74,9 +121,16 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/leads': typeof AuthenticatedLeadsRoute
+  '/stories': typeof AuthenticatedStoriesRoute
+  '/templates': typeof AuthenticatedTemplatesRoute
   '/campanhas/$id': typeof AuthenticatedCampanhasIdRoute
   '/campanhas/nova': typeof AuthenticatedCampanhasNovaRoute
+  '/ferramentas/blacklist': typeof AuthenticatedFerramentasBlacklistRoute
+  '/ferramentas/extrator': typeof AuthenticatedFerramentasExtratorRoute
+  '/ferramentas/importador': typeof AuthenticatedFerramentasImportadorRoute
+  '/ferramentas/verificador': typeof AuthenticatedFerramentasVerificadorRoute
   '/campanhas/': typeof AuthenticatedCampanhasIndexRoute
+  '/ferramentas/': typeof AuthenticatedFerramentasIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -84,9 +138,16 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/leads': typeof AuthenticatedLeadsRoute
+  '/stories': typeof AuthenticatedStoriesRoute
+  '/templates': typeof AuthenticatedTemplatesRoute
   '/campanhas/$id': typeof AuthenticatedCampanhasIdRoute
   '/campanhas/nova': typeof AuthenticatedCampanhasNovaRoute
+  '/ferramentas/blacklist': typeof AuthenticatedFerramentasBlacklistRoute
+  '/ferramentas/extrator': typeof AuthenticatedFerramentasExtratorRoute
+  '/ferramentas/importador': typeof AuthenticatedFerramentasImportadorRoute
+  '/ferramentas/verificador': typeof AuthenticatedFerramentasVerificadorRoute
   '/campanhas': typeof AuthenticatedCampanhasIndexRoute
+  '/ferramentas': typeof AuthenticatedFerramentasIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -96,9 +157,16 @@ export interface FileRoutesById {
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
+  '/_authenticated/stories': typeof AuthenticatedStoriesRoute
+  '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
   '/_authenticated/campanhas/$id': typeof AuthenticatedCampanhasIdRoute
   '/_authenticated/campanhas/nova': typeof AuthenticatedCampanhasNovaRoute
+  '/_authenticated/ferramentas/blacklist': typeof AuthenticatedFerramentasBlacklistRoute
+  '/_authenticated/ferramentas/extrator': typeof AuthenticatedFerramentasExtratorRoute
+  '/_authenticated/ferramentas/importador': typeof AuthenticatedFerramentasImportadorRoute
+  '/_authenticated/ferramentas/verificador': typeof AuthenticatedFerramentasVerificadorRoute
   '/_authenticated/campanhas/': typeof AuthenticatedCampanhasIndexRoute
+  '/_authenticated/ferramentas/': typeof AuthenticatedFerramentasIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -108,9 +176,16 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/dashboard'
     | '/leads'
+    | '/stories'
+    | '/templates'
     | '/campanhas/$id'
     | '/campanhas/nova'
+    | '/ferramentas/blacklist'
+    | '/ferramentas/extrator'
+    | '/ferramentas/importador'
+    | '/ferramentas/verificador'
     | '/campanhas/'
+    | '/ferramentas/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -118,9 +193,16 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/dashboard'
     | '/leads'
+    | '/stories'
+    | '/templates'
     | '/campanhas/$id'
     | '/campanhas/nova'
+    | '/ferramentas/blacklist'
+    | '/ferramentas/extrator'
+    | '/ferramentas/importador'
+    | '/ferramentas/verificador'
     | '/campanhas'
+    | '/ferramentas'
   id:
     | '__root__'
     | '/'
@@ -129,9 +211,16 @@ export interface FileRouteTypes {
     | '/_authenticated/configuracoes'
     | '/_authenticated/dashboard'
     | '/_authenticated/leads'
+    | '/_authenticated/stories'
+    | '/_authenticated/templates'
     | '/_authenticated/campanhas/$id'
     | '/_authenticated/campanhas/nova'
+    | '/_authenticated/ferramentas/blacklist'
+    | '/_authenticated/ferramentas/extrator'
+    | '/_authenticated/ferramentas/importador'
+    | '/_authenticated/ferramentas/verificador'
     | '/_authenticated/campanhas/'
+    | '/_authenticated/ferramentas/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -163,6 +252,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/templates': {
+      id: '/_authenticated/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof AuthenticatedTemplatesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/stories': {
+      id: '/_authenticated/stories'
+      path: '/stories'
+      fullPath: '/stories'
+      preLoaderRoute: typeof AuthenticatedStoriesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/leads': {
       id: '/_authenticated/leads'
       path: '/leads'
@@ -184,11 +287,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedConfiguracoesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/ferramentas/': {
+      id: '/_authenticated/ferramentas/'
+      path: '/ferramentas'
+      fullPath: '/ferramentas/'
+      preLoaderRoute: typeof AuthenticatedFerramentasIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/campanhas/': {
       id: '/_authenticated/campanhas/'
       path: '/campanhas'
       fullPath: '/campanhas/'
       preLoaderRoute: typeof AuthenticatedCampanhasIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ferramentas/verificador': {
+      id: '/_authenticated/ferramentas/verificador'
+      path: '/ferramentas/verificador'
+      fullPath: '/ferramentas/verificador'
+      preLoaderRoute: typeof AuthenticatedFerramentasVerificadorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ferramentas/importador': {
+      id: '/_authenticated/ferramentas/importador'
+      path: '/ferramentas/importador'
+      fullPath: '/ferramentas/importador'
+      preLoaderRoute: typeof AuthenticatedFerramentasImportadorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ferramentas/extrator': {
+      id: '/_authenticated/ferramentas/extrator'
+      path: '/ferramentas/extrator'
+      fullPath: '/ferramentas/extrator'
+      preLoaderRoute: typeof AuthenticatedFerramentasExtratorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ferramentas/blacklist': {
+      id: '/_authenticated/ferramentas/blacklist'
+      path: '/ferramentas/blacklist'
+      fullPath: '/ferramentas/blacklist'
+      preLoaderRoute: typeof AuthenticatedFerramentasBlacklistRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/campanhas/nova': {
@@ -212,18 +350,35 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
+  AuthenticatedStoriesRoute: typeof AuthenticatedStoriesRoute
+  AuthenticatedTemplatesRoute: typeof AuthenticatedTemplatesRoute
   AuthenticatedCampanhasIdRoute: typeof AuthenticatedCampanhasIdRoute
   AuthenticatedCampanhasNovaRoute: typeof AuthenticatedCampanhasNovaRoute
+  AuthenticatedFerramentasBlacklistRoute: typeof AuthenticatedFerramentasBlacklistRoute
+  AuthenticatedFerramentasExtratorRoute: typeof AuthenticatedFerramentasExtratorRoute
+  AuthenticatedFerramentasImportadorRoute: typeof AuthenticatedFerramentasImportadorRoute
+  AuthenticatedFerramentasVerificadorRoute: typeof AuthenticatedFerramentasVerificadorRoute
   AuthenticatedCampanhasIndexRoute: typeof AuthenticatedCampanhasIndexRoute
+  AuthenticatedFerramentasIndexRoute: typeof AuthenticatedFerramentasIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
+  AuthenticatedStoriesRoute: AuthenticatedStoriesRoute,
+  AuthenticatedTemplatesRoute: AuthenticatedTemplatesRoute,
   AuthenticatedCampanhasIdRoute: AuthenticatedCampanhasIdRoute,
   AuthenticatedCampanhasNovaRoute: AuthenticatedCampanhasNovaRoute,
+  AuthenticatedFerramentasBlacklistRoute:
+    AuthenticatedFerramentasBlacklistRoute,
+  AuthenticatedFerramentasExtratorRoute: AuthenticatedFerramentasExtratorRoute,
+  AuthenticatedFerramentasImportadorRoute:
+    AuthenticatedFerramentasImportadorRoute,
+  AuthenticatedFerramentasVerificadorRoute:
+    AuthenticatedFerramentasVerificadorRoute,
   AuthenticatedCampanhasIndexRoute: AuthenticatedCampanhasIndexRoute,
+  AuthenticatedFerramentasIndexRoute: AuthenticatedFerramentasIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

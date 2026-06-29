@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Flame, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -59,11 +59,8 @@ function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 via-background to-background p-4">
       <Card className="w-full max-w-md p-8 shadow-xl">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center mb-3">
-            <Flame className="w-7 h-7" />
-          </div>
-          <h1 className="text-2xl font-bold">Chama AI Delivery</h1>
-          <p className="text-sm text-muted-foreground mt-1">Disparos de WhatsApp simplificados</p>
+          <img src="/logo.png" alt="Chama AI Delivery" className="h-24 w-auto object-contain mb-2" />
+          <p className="text-sm text-muted-foreground">Disparos de WhatsApp simplificados</p>
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "login" | "signup")}>
           <TabsList className="grid grid-cols-2 w-full">
