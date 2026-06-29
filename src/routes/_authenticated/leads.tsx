@@ -168,9 +168,10 @@ function LeadsPage() {
   };
 
   return (
-    <div className="flex h-screen">
-      {/* Painel pastas */}
-      <aside className="w-60 border-r bg-card flex flex-col">
+    <div className="flex h-screen overflow-hidden">
+
+      {/* ── SIDEBAR PASTAS (desktop only) ── */}
+      <aside className="hidden md:flex w-60 border-r bg-card flex-col shrink-0">
         <div className="p-4 border-b">
           <h2 className="font-semibold text-sm">Pastas</h2>
         </div>
@@ -224,12 +225,40 @@ function LeadsPage() {
         </div>
       </aside>
 
-      {/* Tabela */}
-      <section className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="p-4 border-b bg-background flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+      {/* ── CONTEÚDO PRINCIPAL ── */}
+      <section className="flex-1 flex flex-col overflow-hidden min-w-0">
+
+        {/* Chips de pasta (mobile only) */}
+        <div className="md:hidden border-b bg-card">
+          <div className="overflow-x-auto px-3 py-2">
+            <div className="flex gap-1.5 w-max">
+              <button
+                onClick={() => setPastaSel(null)}
+                className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  pastaSel === null ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                }`}
+              >
+                Todos ({leads.length})
+              </button>
+              {pastas.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setPastaSel(p.id)}
+                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    pastaSel === p.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {p.nome} ({countPorPasta(p.id)})
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Header: busca + ações */}
+        <div className="px-3 sm:px-4 py-3 border-b bg-background flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Buscar por nome, telefone, empresa..."
               value={search}
@@ -237,45 +266,49 @@ function LeadsPage() {
               className="pl-9"
             />
           </div>
-          <Button variant="outline" onClick={() => setShowImport(true)}><Upload className="w-4 h-4 mr-2" />Importar CSV</Button>
-          <Button variant="outline" onClick={() => setShowAdd(true)}><UserPlus className="w-4 h-4 mr-2" />Adicionar</Button>
-          <Button variant="outline" onClick={exportar}><Download className="w-4 h-4 mr-2" />Exportar</Button>
-          <span className="text-sm text-muted-foreground">{filtered.length} contatos</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+              <Upload className="w-4 h-4" />
+              <span className="hidden sm:inline ml-1.5">Importar</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowAdd(true)}>
+              <UserPlus className="w-4 h-4" />
+              <span className="hidden sm:inline ml-1.5">Adicionar</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportar}>
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline ml-1.5">Exportar</span>
+            </Button>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">{filtered.length} contatos</span>
+          </div>
         </div>
 
         {/* Barra de seleção em massa */}
         {selecionados.size > 0 && (
-          <div className="px-4 py-2.5 bg-primary/5 border-b border-primary/20 flex items-center gap-3">
+          <div className="px-3 sm:px-4 py-2.5 bg-primary/5 border-b border-primary/20 flex items-center gap-2 sm:gap-3">
             <CheckSquare className="w-4 h-4 text-primary shrink-0" />
             <span className="text-sm font-medium text-primary flex-1">
-              {selecionados.size} contato{selecionados.size !== 1 ? "s" : ""} selecionado{selecionados.size !== 1 ? "s" : ""}
+              <span className="sm:hidden">{selecionados.size} selecionado{selecionados.size !== 1 ? "s" : ""}</span>
+              <span className="hidden sm:inline">{selecionados.size} contato{selecionados.size !== 1 ? "s" : ""} selecionado{selecionados.size !== 1 ? "s" : ""}</span>
             </span>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={excluirSelecionados}
-              disabled={excluindoMassa}
-              className="gap-1.5"
-            >
+            <Button size="sm" variant="destructive" onClick={excluirSelecionados} disabled={excluindoMassa} className="gap-1.5">
               <Trash2 className="w-3.5 h-3.5" />
-              {excluindoMassa ? "Excluindo…" : `Excluir ${selecionados.size}`}
+              <span className="hidden sm:inline">{excluindoMassa ? "Excluindo…" : `Excluir ${selecionados.size}`}</span>
+              <span className="sm:hidden">{excluindoMassa ? "…" : selecionados.size}</span>
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setSelecionados(new Set())}
-              className="gap-1.5 text-muted-foreground"
-            >
-              <X className="w-3.5 h-3.5" /> Cancelar
+            <Button size="sm" variant="ghost" onClick={() => setSelecionados(new Set())} className="gap-1 text-muted-foreground px-2">
+              <X className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Cancelar</span>
             </Button>
           </div>
         )}
 
+        {/* Tabela */}
         <div className="flex-1 overflow-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-muted-foreground border-b sticky top-0 bg-background z-10">
               <tr>
-                <th className="px-4 py-3 w-10">
+                <th className="px-3 sm:px-4 py-3 w-8 sm:w-10">
                   <input
                     type="checkbox"
                     checked={todosSelecionados}
@@ -285,12 +318,12 @@ function LeadsPage() {
                     title={todosSelecionados ? "Desmarcar todos" : "Selecionar todos"}
                   />
                 </th>
-                <th className="py-3">Nome</th>
-                <th className="py-3">Telefone</th>
+                <th className="py-3 pr-2">Nome</th>
+                <th className="py-3 pr-2 hidden sm:table-cell">Telefone</th>
                 <th className="py-3 hidden md:table-cell">Empresa</th>
                 <th className="py-3 hidden lg:table-cell">Tags</th>
                 <th className="py-3 hidden md:table-cell">Importado</th>
-                <th className="py-3 w-20"></th>
+                <th className="py-3 w-16 sm:w-24"></th>
               </tr>
             </thead>
             <tbody>
@@ -305,7 +338,7 @@ function LeadsPage() {
                       sel ? "bg-primary/5 hover:bg-primary/8" : "hover:bg-muted/30"
                     }`}
                   >
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 sm:px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={sel}
@@ -313,14 +346,28 @@ function LeadsPage() {
                         className="accent-primary cursor-pointer"
                       />
                     </td>
-                    <td className="py-3 font-medium">{l.nome || "—"}</td>
-                    <td className="py-3">
+
+                    {/* Nome — no mobile exibe telefone como sublinha */}
+                    <td className="py-3 pr-2 max-w-[120px] sm:max-w-none">
+                      <div className="font-medium truncate">{l.nome || "—"}</div>
+                      <div className="sm:hidden text-xs text-muted-foreground mt-0.5 flex items-center gap-1 flex-wrap">
+                        {formatPhoneBR(l.telefone)}
+                        {!valido && (
+                          <span className="px-1 py-0.5 rounded bg-destructive/10 text-destructive text-[10px]">inválido</span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Telefone (desktop) */}
+                    <td className="py-3 pr-2 hidden sm:table-cell whitespace-nowrap">
                       {formatPhoneBR(l.telefone)}
                       {!valido && (
                         <span className="ml-2 px-1.5 py-0.5 rounded bg-destructive/10 text-destructive text-xs">inválido</span>
                       )}
                     </td>
+
                     <td className="py-3 text-muted-foreground hidden md:table-cell">{l.empresa || "—"}</td>
+
                     <td className="py-3 hidden lg:table-cell" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-wrap gap-1">
                         {(l.tags ?? []).slice(0, 3).map((tag) => (
@@ -335,19 +382,21 @@ function LeadsPage() {
                         )}
                       </div>
                     </td>
-                    <td className="py-3 text-muted-foreground hidden md:table-cell">
+
+                    <td className="py-3 text-muted-foreground hidden md:table-cell whitespace-nowrap">
                       {new Date(l.importado_em).toLocaleDateString("pt-BR")}
                     </td>
-                    <td className="py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center">
-                        <Button variant="ghost" size="sm" onClick={() => setTagsLead(l)} title="Gerenciar tags" className="text-muted-foreground hover:text-primary">
-                          <Tag className="w-4 h-4" />
+
+                    <td className="py-2 pr-1 sm:pr-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setTagsLead(l)} title="Gerenciar tags">
+                          <Tag className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => setHistoricoLead(l)} title="Histórico de disparos" className="text-muted-foreground hover:text-blue-600">
-                          <History className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7 hidden sm:inline-flex" onClick={() => setHistoricoLead(l)} title="Histórico de disparos">
+                          <History className="w-3.5 h-3.5 text-muted-foreground hover:text-blue-600" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => excluirLead(l.id)} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => excluirLead(l.id)} title="Excluir contato">
+                          <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
                         </Button>
                       </div>
                     </td>
@@ -356,7 +405,7 @@ function LeadsPage() {
               })}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-muted-foreground">Nenhum contato</td>
+                  <td colSpan={7} className="p-12 text-center text-muted-foreground">Nenhum contato</td>
                 </tr>
               )}
             </tbody>

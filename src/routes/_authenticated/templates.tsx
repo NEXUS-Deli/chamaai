@@ -85,7 +85,7 @@ function TemplatesPage() {
   const packs = templates.filter((t) => t.variacoes?.length > 0);
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 sm:p-8 space-y-8">
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>

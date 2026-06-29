@@ -59,8 +59,8 @@ function CampanhasList() {
   });
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-8 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Campanhas</h1>
           <p className="text-sm text-muted-foreground">Histórico de disparos</p>
@@ -73,29 +73,30 @@ function CampanhasList() {
         </Link>
       </div>
       <Card className="p-0 overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[480px]">
           <thead className="text-left text-muted-foreground border-b">
             <tr>
-              <th className="px-6 py-3">Nome</th>
-              <th>Status</th>
-              <th>Contatos</th>
-              <th>Enviadas</th>
-              <th>Data</th>
-              <th className="text-right px-6 py-3">Ações</th>
+              <th className="px-4 sm:px-6 py-3">Nome</th>
+              <th className="py-3">Status</th>
+              <th className="py-3 hidden sm:table-cell">Contatos</th>
+              <th className="py-3 hidden sm:table-cell">Enviadas</th>
+              <th className="py-3">Data</th>
+              <th className="text-right px-4 sm:px-6 py-3">Ações</th>
             </tr>
           </thead>
           <tbody>
             {(data ?? []).map((c) => (
               <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                <td className="px-6 py-3 font-medium">{c.nome}</td>
-                <td>
+                <td className="px-4 sm:px-6 py-3 font-medium max-w-[150px] sm:max-w-none truncate">{c.nome}</td>
+                <td className="py-3">
                   <span className="px-2 py-0.5 rounded bg-muted text-xs">
                     {c.status}
                   </span>
                 </td>
-                <td>{c.total_contatos}</td>
-                <td>{c.enviadas}</td>
-                <td>{new Date(c.criada_em).toLocaleDateString("pt-BR")}</td>
+                <td className="py-3 hidden sm:table-cell">{c.total_contatos}</td>
+                <td className="py-3 hidden sm:table-cell">{c.enviadas}</td>
+                <td className="py-3 whitespace-nowrap">{new Date(c.criada_em).toLocaleDateString("pt-BR")}</td>
                 <td className="px-6 py-3">
                   <div className="flex items-center justify-end gap-3">
                     <Link
@@ -128,6 +129,7 @@ function CampanhasList() {
             )}
           </tbody>
         </table>
+        </div>
       </Card>
 
       <AlertDialog

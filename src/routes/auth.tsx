@@ -59,8 +59,7 @@ function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 via-background to-background p-4">
       <Card className="w-full max-w-md p-8 shadow-xl">
         <div className="flex flex-col items-center mb-8">
-          <img src="/logo.png" alt="Chama AI Delivery" className="h-24 w-auto object-contain mb-2" />
-          <p className="text-sm text-muted-foreground">Disparos de WhatsApp simplificados</p>
+          <img src="/logo.png" alt="Chama AI Delivery" className="h-24 w-auto object-contain" />
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "login" | "signup")}>
           <TabsList className="grid grid-cols-2 w-full">

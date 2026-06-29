@@ -440,8 +440,8 @@ function ConfigPage() {
   };
 
   return (
-    <div className="p-8 w-full space-y-6">
-      <div className="flex items-start justify-between">
+    <div className="p-4 sm:p-8 w-full space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Gerenciar WhatsApp</h1>
           <p className="text-sm text-muted-foreground">Crie novas instâncias e conecte seus números de WhatsApp usando a UAZAPI.</p>
@@ -528,9 +528,9 @@ function ConfigPage() {
             Nenhuma instância cadastrada. Crie uma acima para começar.
           </p>
         )}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           {instancias.map((inst) => (
-            <Card key={inst.id} className="p-4 flex flex-col justify-between h-44">
+            <Card key={inst.id} className="p-4 flex flex-col justify-between min-h-44">
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="font-bold text-lg flex items-center gap-2">

@@ -231,7 +231,7 @@ function Dashboard() {
   const temDados = data?.chartData.some((p) => p.enviadas > 0 || p.falhas > 0) ?? false;
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
 
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -301,7 +301,7 @@ function Dashboard() {
       ) : (
         <>
           {/* Métricas */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-px bg-border rounded-xl overflow-hidden border">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-border rounded-xl overflow-hidden border">
             <WhatsAppMetric conectadas={data!.instConectadas} limite={data!.planLimit} />
             <Metric label="Contatos importados"   value={data!.totalLeads.toLocaleString("pt-BR")}           icon={Users}          note={periodoLabel} />
             <Metric label="Campanhas"             value={data!.totalCamps}                                    icon={Send}           note={periodoLabel} />
