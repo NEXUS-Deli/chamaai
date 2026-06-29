@@ -4,9 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff } from "lucide-react";
+import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff, AlertTriangle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { canAddConnection } from "@/lib/plans";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   component: ConfigPage,
@@ -80,6 +82,8 @@ function ConfigPage() {
   const [novaInstanciaNome, setNovaInstanciaNome] = useState("");
   // Mapa de status dinâmico por instância: 'connected' | 'connecting' | 'disconnected'
   const [statusMap, setStatusMap] = useState<Record<string, string>>({});
+  // Informações do plano atual: null = carregando, "no_plan" = sem plano
+  const [planInfo, setPlanInfo] = useState<{ name: string; limit: number } | null | "no_plan">(null);
 
   // Connection Modal States
   const [connectModalOpen, setConnectModalOpen] = useState(false);
@@ -94,11 +98,28 @@ function ConfigPage() {
 
   useEffect(() => {
     fetchInstancias();
+    fetchPlanInfo();
     return () => {
       stopPolling();
       if (statusPollingRef.current) clearInterval(statusPollingRef.current);
     };
   }, []);
+
+  const fetchPlanInfo = async () => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from("user_plans")
+      .select("plans(name, max_connections)")
+      .eq("user_id", u.user.id)
+      .eq("active", true)
+      .maybeSingle();
+    if (error || !data) { setPlanInfo("no_plan"); return; }
+    const plan = data.plans as { name: string; max_connections: number } | null;
+    if (!plan) { setPlanInfo("no_plan"); return; }
+    setPlanInfo({ name: plan.name, limit: plan.max_connections });
+  };
 
   const fetchInstancias = async () => {
     const { data: u } = await supabase.auth.getUser();
@@ -183,6 +204,15 @@ function ConfigPage() {
     try {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) throw new Error("Usuário não autenticado");
+
+      // Verifica limite de conexões do plano antes de chamar a UAZAPI
+      const limitCheck = await canAddConnection(u.user.id);
+      if (!limitCheck.allowed) {
+        throw new Error(
+          `Limite de conexões atingido para o seu plano (${limitCheck.current}/${limitCheck.limit}). ` +
+          `Faça upgrade para adicionar mais números.`
+        );
+      }
 
       // Chama a Edge Function para criar a instância (esconde o admin token)
       const functionData = await callProxy('create_instance', { name: novaInstanciaNome.trim() });
@@ -428,16 +458,63 @@ function ConfigPage() {
         </Button>
       </div>
 
+      {/* Banner de plano */}
+      {planInfo === "no_plan" && (
+        <div className="flex items-center gap-3 rounded-lg border border-yellow-300 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-700 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>Nenhum plano ativo encontrado. Entre em contato com o suporte para ativar o seu plano.</span>
+        </div>
+      )}
+      {planInfo && planInfo !== "no_plan" && (() => {
+        const atLimit = instancias.length >= planInfo.limit;
+        const pct = Math.min(100, Math.round((instancias.length / planInfo.limit) * 100));
+        return (
+          <div className="flex items-center justify-between gap-4 rounded-lg border bg-card px-5 py-3">
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary" className="text-xs font-semibold">
+                Plano {planInfo.name}
+              </Badge>
+              <span className={`text-sm font-medium ${atLimit ? "text-destructive" : "text-muted-foreground"}`}>
+                {instancias.length}/{planInfo.limit} conexões utilizadas
+              </span>
+            </div>
+            <div className="flex items-center gap-2 min-w-[120px]">
+              <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${atLimit ? "bg-destructive" : "bg-primary"}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
+            </div>
+          </div>
+        );
+      })()}
+
       <Card className="p-6 space-y-4">
         <h2 className="font-semibold">Nova Instância</h2>
+        {planInfo && planInfo !== "no_plan" && instancias.length >= planInfo.limit && (
+          <p className="text-sm text-destructive flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            Você atingiu o limite do seu plano. Faça upgrade para adicionar mais números.
+          </p>
+        )}
         <div className="flex gap-2">
           <Input
             placeholder="Nome da Instância (ex: WhatsApp Comercial)"
             value={novaInstanciaNome}
             onChange={e => setNovaInstanciaNome(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addInstancia()}
+            disabled={planInfo !== null && planInfo !== "no_plan" && instancias.length >= planInfo.limit}
           />
-          <Button onClick={addInstancia} disabled={loading || !novaInstanciaNome.trim()}>
+          <Button
+            onClick={addInstancia}
+            disabled={
+              loading ||
+              !novaInstanciaNome.trim() ||
+              (planInfo !== null && planInfo !== "no_plan" && instancias.length >= planInfo.limit)
+            }
+          >
             {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
             Criar Instância
           </Button>

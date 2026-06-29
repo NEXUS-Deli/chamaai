@@ -127,9 +127,10 @@ function Dashboard() {
         { data: campanhasRecentes },
         { data: campanhasGrafico },
         { data: storiesRaw },
+        { data: planRaw },
       ] = await Promise.all([
-        // Instâncias: estado atual, sem filtro de período
-        supabase.from("instancias").select("id,status").eq("usuario_id", uid),
+        // Instâncias: busca token para verificar status em tempo real
+        supabase.from("instancias").select("id,token").eq("usuario_id", uid),
 
         // Leads importados no período
         supabase.from("leads").select("id")
@@ -161,20 +162,58 @@ function Dashboard() {
           .eq("status", "pendente")
           .order("agendado_para", { ascending: true })
           .limit(4),
+
+        // Plano ativo do usuário para exibir o limite de conexões
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("user_plans")
+          .select("plans(max_connections)")
+          .eq("user_id", uid)
+          .eq("active", true)
+          .maybeSingle(),
       ]);
 
       const campList    = (campanhasRecentes ?? []) as CampanhaItem[];
       const campGrafico = (campanhasGrafico  ?? []) as CampanhaItem[];
       const storyList   = (storiesRaw        ?? []) as StoryItem[];
+      const planLimit   = (planRaw?.plans as { max_connections: number } | null)?.max_connections ?? null;
 
       const totalEnviadas  = campGrafico.reduce((a, c) => a + (c.enviadas  ?? 0), 0);
       const totalEntregues = campGrafico.reduce((a, c) => a + (c.entregues ?? 0), 0);
       const totalErros     = campGrafico.reduce((a, c) => a + (c.erros     ?? 0), 0);
-      const instConectadas = (instancias ?? []).filter((i) => i.status === "connected").length;
+
+      // Verifica status real das instâncias via UAZAPI (igual à página Conexões)
+      const instList = (instancias ?? []) as { id: string; token: string | null }[];
+      const statusResults = await Promise.allSettled(
+        instList.map(async (inst) => {
+          if (!inst.token) return false;
+          try {
+            const { data: sd } = await supabase.functions.invoke("uazapi-proxy", {
+              body: { action: "instance_status", payload: { token: inst.token } },
+            });
+            const d = sd as Record<string, unknown> | null;
+            let raw = "disconnected";
+            if (d?.status && typeof d.status === "object") {
+              const s = d.status as Record<string, unknown>;
+              if (s.connected === true || s.loggedIn === true) raw = "connected";
+            } else if (d?.status && typeof d.status === "string") {
+              raw = d.status;
+            } else if (typeof (d?.instance as Record<string, unknown> | undefined)?.status === "string") {
+              raw = ((d!.instance as Record<string, unknown>).status as string);
+            }
+            return raw === "open" || raw === "connected";
+          } catch {
+            return false;
+          }
+        })
+      );
+      const instConectadas = statusResults.filter(
+        (r) => r.status === "fulfilled" && r.value === true
+      ).length;
 
       return {
         totalInst: (instancias ?? []).length,
         instConectadas,
+        planLimit,
         totalLeads: (leads ?? []).length,
         totalCamps: campList.length,
         totalEnviadas,
@@ -263,7 +302,7 @@ function Dashboard() {
         <>
           {/* Métricas */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-px bg-border rounded-xl overflow-hidden border">
-            <Metric label="WhatsApp conectados"   value={`${data!.instConectadas}/${data!.totalInst}`}        icon={Smartphone}    active={data!.instConectadas > 0} note="estado atual" />
+            <WhatsAppMetric conectadas={data!.instConectadas} limite={data!.planLimit} />
             <Metric label="Contatos importados"   value={data!.totalLeads.toLocaleString("pt-BR")}           icon={Users}          note={periodoLabel} />
             <Metric label="Campanhas"             value={data!.totalCamps}                                    icon={Send}           note={periodoLabel} />
             <Metric label="Mensagens enviadas"    value={data!.totalEnviadas.toLocaleString("pt-BR")}        icon={MessageSquare}  note={periodoLabel} />
@@ -432,6 +471,41 @@ function Metric({
         {note && <p className="text-xs text-muted-foreground mt-1">{note}</p>}
       </div>
       <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+    </div>
+  );
+}
+
+function WhatsAppMetric({ conectadas, limite }: { conectadas: number; limite: number | null }) {
+  const hasPlan = limite !== null && limite > 0;
+  const pct     = hasPlan ? Math.min(100, Math.round((conectadas / limite!) * 100)) : 0;
+  const atLimit = hasPlan && conectadas >= limite!;
+
+  return (
+    <div className="bg-card px-5 py-4 flex items-start justify-between gap-3">
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-muted-foreground mb-1.5">WhatsApp conectados</p>
+        <p className={`text-xl font-bold tracking-tight ${conectadas > 0 ? "text-primary" : ""}`}>
+          {conectadas}{hasPlan ? `/${limite}` : ""}
+        </p>
+        {hasPlan ? (
+          <div className="mt-2 space-y-1">
+            <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  atLimit ? "bg-destructive" : conectadas > 0 ? "bg-primary" : "bg-muted-foreground/30"
+                }`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {atLimit ? "Limite atingido" : `${pct}% utilizado`} · estado atual
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground mt-1">estado atual</p>
+        )}
+      </div>
+      <Smartphone className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
     </div>
   );
 }
