@@ -123,7 +123,7 @@ function Dashboard() {
 
       const [
         { data: instancias },
-        { data: leads },
+        { count: leadsCount },
         { data: campanhasRecentes },
         { data: campanhasGrafico },
         { data: storiesRaw },
@@ -132,8 +132,9 @@ function Dashboard() {
         // Instâncias: busca token para verificar status em tempo real
         supabase.from("instancias").select("id,token").eq("usuario_id", uid),
 
-        // Leads importados no período
-        supabase.from("leads").select("id")
+        // Leads importados no período (count sem buscar linhas, sem limite de 1000)
+        supabase.from("leads")
+          .select("*", { count: "exact", head: true })
           .eq("usuario_id", uid)
           .gte("importado_em", start)
           .lte("importado_em", end),
@@ -214,7 +215,7 @@ function Dashboard() {
         totalInst: (instancias ?? []).length,
         instConectadas,
         planLimit,
-        totalLeads: (leads ?? []).length,
+        totalLeads: leadsCount ?? 0,
         totalCamps: campList.length,
         totalEnviadas,
         totalEntregues,
