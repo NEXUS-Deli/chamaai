@@ -109,13 +109,25 @@ function NovaCampanha() {
     (async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
-      const { data } = await supabase
-        .from("leads")
-        .select("id, telefone, nome, empresa")
-        .eq("usuario_id", u.user.id)
-        .in("pasta_id", pastasSel);
 
-      const validos = (data ?? [])
+      // Busca em lotes para superar o limite de 1000 linhas do PostgREST
+      const BATCH = 1000;
+      let all: { id: string; telefone: string; nome: string | null; empresa: string | null }[] = [];
+      let from = 0;
+      while (true) {
+        const { data } = await supabase
+          .from("leads")
+          .select("id, telefone, nome, empresa")
+          .eq("usuario_id", u.user.id)
+          .in("pasta_id", pastasSel)
+          .range(from, from + BATCH - 1);
+        const batch = data ?? [];
+        all = all.concat(batch);
+        if (batch.length < BATCH) break;
+        from += BATCH;
+      }
+
+      const validos = all
         .filter((l) => isValidPhone(l.telefone))
         .map((l) => ({ id: l.id, telefone: toE164BR(l.telefone), nome: l.nome ?? "", empresa: l.empresa ?? "" }));
 
@@ -123,6 +135,19 @@ function NovaCampanha() {
       setLeadsSel(validos.map((l) => l.telefone));
     })();
   }, [pastasSel, origem]);
+
+  const selecionarProximos = (n: number) => {
+    const naoSelecionados = leadsDaPasta
+      .filter((l) => !leadsSelSet.has(l.telefone))
+      .slice(0, n)
+      .map((l) => l.telefone);
+    if (!naoSelecionados.length) {
+      toast.info("Todos os leads já estão selecionados");
+      return;
+    }
+    setLeadsSel((prev) => [...prev, ...naoSelecionados]);
+    toast.success(`+${naoSelecionados.length} leads adicionados à seleção`);
+  };
 
   const handleCSV = async (file: File) => {
     const parsed = await parseCSV(file);
@@ -499,14 +524,42 @@ function NovaCampanha() {
               </div>
 
               {pastasSel.length > 0 && (
-                <div className="space-y-2 border-t pt-4">
-                  <div className="flex items-center justify-between">
+                <div className="space-y-3 border-t pt-4">
+                  {/* Cabeçalho com total e ações globais */}
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <Label>Leads ({leadsDaPasta.length})</Label>
-                    <div className="space-x-2">
+                    <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={() => setLeadsSel(leadsDaPasta.map((l) => l.telefone))}>Marcar todos</Button>
                       <Button variant="outline" size="sm" onClick={() => setLeadsSel([])}>Desmarcar</Button>
                     </div>
                   </div>
+
+                  {/* Seleção rápida por lote */}
+                  <div className="flex items-center gap-2 flex-wrap p-3 bg-muted/50 rounded-lg">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Próximos:</span>
+                    {[10, 20, 50, 100, 200, 500].map((n) => {
+                      const disponiveis = leadsDaPasta.filter((l) => !leadsSelSet.has(l.telefone)).length;
+                      const label = Math.min(n, disponiveis);
+                      if (disponiveis === 0) return null;
+                      return (
+                        <Button
+                          key={n}
+                          variant="outline"
+                          size="sm"
+                          disabled={disponiveis === 0}
+                          onClick={() => selecionarProximos(n)}
+                          className="h-7 px-3 text-xs font-medium"
+                        >
+                          +{label}
+                        </Button>
+                      );
+                    })}
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      {leadsDaPasta.filter((l) => !leadsSelSet.has(l.telefone)).length} disponíveis
+                    </span>
+                  </div>
+
+                  {/* Lista de leads */}
                   <div className="max-h-64 overflow-y-auto space-y-1 p-2 border rounded">
                     {leadsDaPasta.map((l) => (
                       <label key={l.id} className="flex items-center gap-3 p-2 hover:bg-muted rounded cursor-pointer">
