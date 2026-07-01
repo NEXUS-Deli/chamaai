@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Users, LogOut, Flame, Menu, X, ChevronLeft, ChevronRight, Sun, Moon, Wrench, Clapperboard, FileText, Send } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Flame, Menu, X, ChevronLeft, ChevronRight, Sun, Moon, Wrench, Clapperboard, FileText, Send, ShieldCheck } from "lucide-react";
 import { type ReactNode, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBranding } from "@/lib/branding";
@@ -30,11 +30,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { branding } = useBranding();
 
-  // No mobile: controla o drawer (aberto/fechado)
-  // No desktop: controla se a sidebar está expandida ou recolhida
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const { theme, toggle: toggleTheme } = useTheme();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: u }) => {
+      if (!u.user) return;
+      (supabase as any)
+        .from("admins")
+        .select("user_id")
+        .eq("user_id", u.user.id)
+        .maybeSingle()
+        .then(({ data }: { data: unknown }) => setIsAdmin(!!data));
+    });
+  }, []);
 
   // Fecha o drawer ao mudar de rota no mobile
   useEffect(() => {
@@ -83,6 +94,23 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
         );
       })}
+
+      {isAdmin && (
+        <Link
+          to="/admin"
+          title={collapsed ? "Admin" : undefined}
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 mt-2 border-t border-sidebar-border pt-3 ${
+            collapsed ? "justify-center px-2" : ""
+          } ${
+            pathname === "/admin"
+              ? "bg-primary text-primary-foreground"
+              : "text-sidebar-foreground hover:bg-sidebar-accent"
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4 shrink-0" />
+          {!collapsed && <span className="truncate">Admin</span>}
+        </Link>
+      )}
     </nav>
   );
 
