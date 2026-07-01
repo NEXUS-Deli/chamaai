@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Loader2, Mail, Lock, ArrowRight } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowRight, User } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -40,8 +40,10 @@ const SLIDES = [
 
 function AuthPage() {
   const navigate = useNavigate();
+  const [mode, setMode]       = useState<"login" | "signup">("login");
   const [email, setEmail]     = useState("");
   const [senha, setSenha]     = useState("");
+  const [nome, setNome]       = useState("");
   const [loading, setLoading] = useState(false);
   const [slide, setSlide]     = useState(0);
 
@@ -56,7 +58,12 @@ function AuthPage() {
     });
   }, [navigate]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const switchMode = (next: "login" | "signup") => {
+    setMode(next);
+    setEmail(""); setSenha(""); setNome("");
+  };
+
+  const handleLogin = async (e: { preventDefault(): void }) => {
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
@@ -64,6 +71,20 @@ function AuthPage() {
     if (error) return toast.error(error.message);
     toast.success("Bem-vindo!");
     navigate({ to: "/dashboard", replace: true });
+  };
+
+  const handleSignup = async (e: { preventDefault(): void }) => {
+    e.preventDefault();
+    setLoading(true);
+    const { error } = await supabase.auth.signUp({
+      email,
+      password: senha,
+      options: { emailRedirectTo: window.location.origin, data: { nome } },
+    });
+    setLoading(false);
+    if (error) return toast.error(error.message);
+    toast.success("Conta criada! Você já pode entrar.");
+    switchMode("login");
   };
 
   return (
@@ -127,7 +148,7 @@ function AuthPage() {
         </div>
       </div>
 
-      {/* ── DIREITA: formulário de login ── */}
+      {/* ── DIREITA: formulário ── */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 sm:px-12">
         <div className="w-full max-w-sm">
 
@@ -135,58 +156,138 @@ function AuthPage() {
             <img src="/logo.png" alt="Chama AI Delivery" className="h-20 w-auto object-contain" />
           </div>
 
-          <div className="mb-7 text-center">
-            <h1 className="text-2xl font-bold">Dispare, venda e cresça.</h1>
-            <p className="text-sm text-muted-foreground mt-1">Faça login abaixo com as suas credenciais</p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                E-mail
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="email"
-                  required
-                  placeholder="seu@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10"
-                />
+          {mode === "login" ? (
+            <>
+              <div className="mb-7 text-center">
+                <h1 className="text-2xl font-bold">Dispare, venda e cresça.</h1>
+                <p className="text-sm text-muted-foreground mt-1">Faça login abaixo com as suas credenciais</p>
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Senha
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={senha}
-                  onChange={(e) => setSenha(e.target.value)}
-                  className="pl-10"
-                />
+              <form onSubmit={handleLogin} className="space-y-5">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    E-mail
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="email"
+                      required
+                      placeholder="seu@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Senha
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={senha}
+                      onChange={(e) => setSenha(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <Button type="submit" disabled={loading} className="w-full gap-2 h-11 text-base rounded-xl">
+                  {loading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <><span>Entrar na Plataforma</span><ArrowRight className="w-4 h-4" /></>
+                  }
+                </Button>
+              </form>
+
+              <p className="text-center text-sm text-muted-foreground mt-8">
+                Não tem uma conta?{" "}
+                <button onClick={() => switchMode("signup")} className="text-primary font-semibold hover:underline">
+                  Criar conta
+                </button>
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="mb-7 text-center">
+                <h1 className="text-2xl font-bold">Criar conta</h1>
+                <p className="text-sm text-muted-foreground mt-1">Preencha os dados abaixo para começar</p>
               </div>
-            </div>
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full gap-2 h-11 text-base rounded-xl"
-            >
-              {loading
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <><span>Entrar na Plataforma</span><ArrowRight className="w-4 h-4" /></>
-              }
-            </Button>
-          </form>
+              <form onSubmit={handleSignup} className="space-y-5">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Nome
+                  </label>
+                  <div className="relative">
+                    <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      required
+                      placeholder="Seu nome"
+                      value={nome}
+                      onChange={(e) => setNome(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
 
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    E-mail
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="email"
+                      required
+                      placeholder="seu@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Senha
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="••••••••"
+                      value={senha}
+                      onChange={(e) => setSenha(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <Button type="submit" disabled={loading} className="w-full gap-2 h-11 text-base rounded-xl">
+                  {loading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <><span>Criar conta</span><ArrowRight className="w-4 h-4" /></>
+                  }
+                </Button>
+              </form>
+
+              <p className="text-center text-sm text-muted-foreground mt-8">
+                Já tenho uma conta.{" "}
+                <button onClick={() => switchMode("login")} className="text-primary font-semibold hover:underline">
+                  Entrar
+                </button>
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
