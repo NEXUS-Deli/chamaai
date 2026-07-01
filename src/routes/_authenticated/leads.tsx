@@ -52,16 +52,32 @@ function LeadsPage() {
   const load = async () => {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
-    const [{ data: ps }, { data: ls }] = await Promise.all([
-      supabase.from("pastas").select("id,nome,codigo").eq("usuario_id", u.user.id).order("nome"),
-      (supabase as any)
+
+    const { data: ps } = await supabase
+      .from("pastas")
+      .select("id,nome,codigo")
+      .eq("usuario_id", u.user.id)
+      .order("nome");
+
+    // Busca todos os leads em lotes de 1000 (limite padrão do PostgREST)
+    const BATCH = 1000;
+    let allLeads: Lead[] = [];
+    let from = 0;
+    while (true) {
+      const { data: ls } = await (supabase as any)
         .from("leads")
         .select("id,telefone,nome,empresa,pasta_id,importado_em,tags")
         .eq("usuario_id", u.user.id)
-        .order("importado_em", { ascending: false }),
-    ]);
+        .order("importado_em", { ascending: false })
+        .range(from, from + BATCH - 1);
+      const batch = ((ls ?? []) as Lead[]).map((l: Lead) => ({ ...l, tags: l.tags ?? [] }));
+      allLeads = allLeads.concat(batch);
+      if (batch.length < BATCH) break;
+      from += BATCH;
+    }
+
     setPastas(ps ?? []);
-    setLeads(((ls ?? []) as Lead[]).map((l) => ({ ...l, tags: l.tags ?? [] })));
+    setLeads(allLeads);
     setSelecionados(new Set());
   };
 

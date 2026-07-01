@@ -301,34 +301,54 @@ serve(async (req) => {
       })
     }
 
-    // --- GET CONTACTS (lista contatos da instância) ---
+    // --- GET CONTACTS (lista contatos da instância, com paginação automática) ---
     if (action === 'get_contacts') {
       const { token, contactScope } = payload
       if (!token) throw new Error('Token é obrigatório')
 
       const scope = contactScope || 'address_book'
-      const url = `${UAZAPI_BASE_URL}/contacts?contactScope=${scope}`
+      const PAGE_SIZE = 1000
+      const allContacts: unknown[] = []
+      let page = 1
+      let hasMore = true
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json', 'token': token },
-      })
+      while (hasMore) {
+        const url = `${UAZAPI_BASE_URL}/contacts?contactScope=${scope}&page=${page}&limit=${PAGE_SIZE}`
 
-      const rawText = await response.text()
-      let data: unknown
-      try { data = JSON.parse(rawText) } catch { data = [] }
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json', 'token': token },
+        })
 
-      if (!response.ok) {
-        const errMsg = (data as Record<string, string>)?.error
-          || (data as Record<string, string>)?.message
-          || `Erro ${response.status} da API Uazapi`
-        console.error('[uazapi-proxy] get_contacts error:', response.status, rawText)
-        throw new Error(errMsg)
+        const rawText = await response.text()
+        let data: unknown
+        try { data = JSON.parse(rawText) } catch { data = [] }
+
+        if (!response.ok) {
+          const errMsg = (data as Record<string, string>)?.error
+            || (data as Record<string, string>)?.message
+            || `Erro ${response.status} da API Uazapi`
+          console.error('[uazapi-proxy] get_contacts error:', response.status, rawText)
+          throw new Error(errMsg)
+        }
+
+        const pageList = Array.isArray(data)
+          ? data
+          : (data as Record<string, unknown>)?.contacts ?? (data as Record<string, unknown>)?.data ?? []
+
+        const items = pageList as unknown[]
+        allContacts.push(...items)
+
+        // Para quando a página retorna menos que o limite (última página)
+        hasMore = items.length === PAGE_SIZE
+        page++
+
+        // Proteção contra loop infinito (máx 50 páginas = 50.000 contatos)
+        if (page > 50) break
       }
 
-      const list = Array.isArray(data) ? data : (data as Record<string, unknown>)?.contacts ?? (data as Record<string, unknown>)?.data ?? []
-      console.log(`[uazapi-proxy] get_contacts OK — ${(list as unknown[]).length} contato(s), scope=${scope}`)
-      return new Response(JSON.stringify(list), {
+      console.log(`[uazapi-proxy] get_contacts OK — ${allContacts.length} contato(s) total (${page - 1} página(s)), scope=${scope}`)
+      return new Response(JSON.stringify(allContacts), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })
