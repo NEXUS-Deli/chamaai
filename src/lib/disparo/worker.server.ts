@@ -374,6 +374,32 @@ export async function retomarCampanha(campanhaId: string): Promise<void> {
     .from('campanhas')
     .update({ status: 'em_andamento' })
     .eq('id', campanhaId);
+
+  // Se nenhum contato está agendado, agenda o primeiro pendente para agora
+  const { count: agendados } = await supabaseAdmin
+    .from('contatos_campanha')
+    .select('id', { count: 'exact', head: true })
+    .eq('campanha_id', campanhaId)
+    .eq('status', 'pendente')
+    .not('next_send_at', 'is', null);
+
+  if ((agendados ?? 0) === 0) {
+    const { data: primeiro } = await supabaseAdmin
+      .from('contatos_campanha')
+      .select('id')
+      .eq('campanha_id', campanhaId)
+      .eq('status', 'pendente')
+      .is('next_send_at', null)
+      .order('id', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (primeiro) {
+      await supabaseAdmin
+        .from('contatos_campanha')
+        .update({ next_send_at: new Date().toISOString() })
+        .eq('id', primeiro.id);
+    }
+  }
 }
 
 export async function cancelarCampanha(campanhaId: string): Promise<void> {

@@ -197,6 +197,33 @@ async function processarDisparo() {
         continue
       }
 
+      // Se nenhum contato está agendado (ex: campanha retomada ou migração do bug antigo),
+      // agenda o primeiro pendente com null para agora
+      const { count: agendados } = await supabase
+        .from('contatos_campanha')
+        .select('id', { count: 'exact', head: true })
+        .eq('campanha_id', campanha.id)
+        .eq('status', 'pendente')
+        .not('next_send_at', 'is', null)
+
+      if ((agendados ?? 0) === 0) {
+        const { data: primeiro } = await supabase
+          .from('contatos_campanha')
+          .select('id')
+          .eq('campanha_id', campanha.id)
+          .eq('status', 'pendente')
+          .is('next_send_at', null)
+          .order('id', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        if (primeiro) {
+          await supabase
+            .from('contatos_campanha')
+            .update({ next_send_at: new Date().toISOString() })
+            .eq('id', primeiro.id)
+        }
+      }
+
       // Processa contatos elegíveis por até 50 segundos desta invocação
       const limite = Date.now() + 50_000
 
