@@ -194,14 +194,16 @@ async function processarCampanha(campanha: Campanha): Promise<void> {
   const limite = Date.now() + 50_000; // processa por no máximo 50s desta campanha
 
   while (Date.now() < limite) {
-    // Busca próximo contato elegível: pendente e sem next_send_at (ou next_send_at já passou)
+    // Busca próximo contato elegível: apenas os que têm next_send_at agendado e já passou
+    // Contatos com next_send_at IS NULL ainda não foram agendados — nunca devem ser disparados aqui
     const { data: contatos } = await supabaseAdmin
       .from('contatos_campanha')
       .select('*')
       .eq('campanha_id', campanha.id)
       .eq('status', 'pendente')
-      .or(`next_send_at.is.null,next_send_at.lte.${new Date().toISOString()}`)
-      .order('next_send_at', { ascending: true, nullsFirst: true })
+      .not('next_send_at', 'is', null)
+      .lte('next_send_at', new Date().toISOString())
+      .order('next_send_at', { ascending: true })
       .limit(1);
 
     const contato = contatos?.[0] as ContatoCampanha | undefined;

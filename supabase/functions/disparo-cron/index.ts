@@ -206,8 +206,9 @@ async function processarDisparo() {
           .select('*')
           .eq('campanha_id', campanha.id)
           .eq('status', 'pendente')
-          .or(`next_send_at.is.null,next_send_at.lte.${new Date().toISOString()}`)
-          .order('next_send_at', { ascending: true, nullsFirst: true })
+          .not('next_send_at', 'is', null)
+          .lte('next_send_at', new Date().toISOString())
+          .order('next_send_at', { ascending: true })
           .limit(1)
 
         const contato = contatos?.[0] as ContatoCampanha | undefined
