@@ -286,9 +286,11 @@ function ConfigPage() {
         setInstancias(prev => prev.map(i => i.id === inst.id ? { ...i, webhook_configurado: true } : i));
         toast.success("Rastreamento de entrega ativado com sucesso!");
       } else {
-        toast.error("Não foi possível ativar o rastreamento. Verifique se a instância está conectada.");
+        console.error("[webhook] Todos os endpoints falharam:", result?.erros);
+        toast.error("Não foi possível ativar o rastreamento. Verifique o console (F12) para detalhes.");
       }
-    } catch {
+    } catch (e) {
+      console.error("[webhook] Erro:", e);
       toast.error("Erro ao configurar rastreamento.");
     } finally {
       setLoadingWebhook(null);

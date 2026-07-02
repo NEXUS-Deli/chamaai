@@ -217,50 +217,81 @@ serve(async (req) => {
         ? `${Deno.env.get('SUPABASE_URL')}/functions/v1/disparo-webhook`
         : 'https://jaoxormsyftctpsegtza.supabase.co/functions/v1/disparo-webhook'
 
-      const tokenHeaders = { 'Content-Type': 'application/json', 'token': token }
-      const adminHeaders = { 'Content-Type': 'application/json', 'admintoken': UAZAPI_ADMIN_TOKEN }
+      const th = { 'Content-Type': 'application/json', 'token': token }
+      const ah = { 'Content-Type': 'application/json', 'admintoken': UAZAPI_ADMIN_TOKEN as string }
 
-      // uazapiGO usa events como string "messages", não array
-      const candidatos = [
-        { headers: tokenHeaders, url: `${UAZAPI_BASE_URL}/webhook/set`,
-          body: { webhookUrl: WEBHOOK_URL, enabled: true, events: 'messages' } },
-        { headers: tokenHeaders, url: `${UAZAPI_BASE_URL}/webhook`,
-          body: { url: WEBHOOK_URL, enabled: true, events: 'messages' } },
-        { headers: tokenHeaders, url: `${UAZAPI_BASE_URL}/webhook/create`,
-          body: { url: WEBHOOK_URL, enabled: true, events: 'messages' } },
-        { headers: tokenHeaders, url: `${UAZAPI_BASE_URL}/instance/webhook`,
-          body: { webhook: WEBHOOK_URL, enabled: true, events: 'messages' } },
+      // Tenta várias combinações de endpoint/método/body até uma funcionar.
+      // A UAZAPI varia bastante dependendo da versão (uazapiGO, baileys, etc).
+      type Candidato = { method: string; headers: Record<string,string>; url: string; body: Record<string,unknown> }
+      const candidatos: Candidato[] = [
+        // PUT /webhook — forma mais comum no uazapiGO
+        { method: 'PUT',  headers: th, url: `${UAZAPI_BASE_URL}/webhook`,
+          body: { url: WEBHOOK_URL, enabled: true } },
+        { method: 'PUT',  headers: th, url: `${UAZAPI_BASE_URL}/webhook`,
+          body: { webhookUrl: WEBHOOK_URL, enabled: true } },
+        { method: 'PUT',  headers: th, url: `${UAZAPI_BASE_URL}/webhook`,
+          body: { url: WEBHOOK_URL, enabled: true, events: ['messages.upsert','messages.update'] } },
+        // POST /webhook
+        { method: 'POST', headers: th, url: `${UAZAPI_BASE_URL}/webhook`,
+          body: { url: WEBHOOK_URL, enabled: true } },
+        { method: 'POST', headers: th, url: `${UAZAPI_BASE_URL}/webhook`,
+          body: { webhookUrl: WEBHOOK_URL, enabled: true } },
+        { method: 'POST', headers: th, url: `${UAZAPI_BASE_URL}/webhook`,
+          body: { url: WEBHOOK_URL, enabled: true, events: ['messages.upsert','messages.update'] } },
+        // POST /webhook/set
+        { method: 'POST', headers: th, url: `${UAZAPI_BASE_URL}/webhook/set`,
+          body: { webhookUrl: WEBHOOK_URL, enabled: true } },
+        { method: 'POST', headers: th, url: `${UAZAPI_BASE_URL}/webhook/set`,
+          body: { url: WEBHOOK_URL, enabled: true } },
+        { method: 'PUT',  headers: th, url: `${UAZAPI_BASE_URL}/webhook/set`,
+          body: { webhookUrl: WEBHOOK_URL, enabled: true } },
+        // POST /instance/webhook
+        { method: 'POST', headers: th, url: `${UAZAPI_BASE_URL}/instance/webhook`,
+          body: { webhook: WEBHOOK_URL, enabled: true } },
+        { method: 'PUT',  headers: th, url: `${UAZAPI_BASE_URL}/instance/webhook`,
+          body: { webhook: WEBHOOK_URL, enabled: true } },
+        { method: 'PUT',  headers: th, url: `${UAZAPI_BASE_URL}/instance/webhook`,
+          body: { url: WEBHOOK_URL, enabled: true } },
+        // Com admintoken + instanceId
         ...(instanceId ? [
-          { headers: adminHeaders, url: `${UAZAPI_BASE_URL}/webhook/set`,
-            body: { instanceId, webhookUrl: WEBHOOK_URL, enabled: true, events: 'messages' } },
-          { headers: adminHeaders, url: `${UAZAPI_BASE_URL}/webhook`,
-            body: { instanceId, url: WEBHOOK_URL, enabled: true, events: 'messages' } },
+          { method: 'POST', headers: ah, url: `${UAZAPI_BASE_URL}/webhook/set`,
+            body: { instanceId, webhookUrl: WEBHOOK_URL, enabled: true } },
+          { method: 'PUT',  headers: ah, url: `${UAZAPI_BASE_URL}/webhook`,
+            body: { instanceId, url: WEBHOOK_URL, enabled: true } },
+          { method: 'POST', headers: ah, url: `${UAZAPI_BASE_URL}/webhook`,
+            body: { instanceId, url: WEBHOOK_URL, enabled: true } },
         ] : []),
       ]
 
-      let lastStatus = 0
-      let lastBody = ''
-      for (const candidato of candidatos) {
-        const r = await fetch(candidato.url, {
-          method: 'POST',
-          headers: candidato.headers,
-          body: JSON.stringify(candidato.body),
-        })
-        lastStatus = r.status
-        lastBody = await r.text()
-        if (r.ok) {
-          let parsed: unknown = {}
-          try { parsed = JSON.parse(lastBody) } catch { /* ignora */ }
-          console.log(`[uazapi-proxy] set_webhook OK via ${candidato.url}`)
-          return new Response(JSON.stringify({ ok: true, ...(parsed as object) }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
+      const erros: string[] = []
+      for (const c of candidatos) {
+        try {
+          const r = await fetch(c.url, {
+            method: c.method,
+            headers: c.headers,
+            body: JSON.stringify(c.body),
           })
+          const body = await r.text()
+          if (r.ok) {
+            let parsed: unknown = {}
+            try { parsed = JSON.parse(body) } catch { /* ignora */ }
+            console.log(`[uazapi-proxy] set_webhook OK: ${c.method} ${c.url}`)
+            return new Response(JSON.stringify({ ok: true, ...(parsed as object) }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 200,
+            })
+          }
+          const msg = `${c.method} ${c.url} → ${r.status}: ${body.slice(0, 200)}`
+          erros.push(msg)
+          console.warn(`[uazapi-proxy] set_webhook falhou: ${msg}`)
+        } catch (e) {
+          const msg = `${c.method} ${c.url} → erro: ${e}`
+          erros.push(msg)
+          console.warn(`[uazapi-proxy] set_webhook exceção: ${msg}`)
         }
-        console.warn(`[uazapi-proxy] set_webhook falhou em ${candidato.url}: ${r.status} ${lastBody}`)
       }
 
-      return new Response(JSON.stringify({ ok: false, message: `Webhook não configurado (HTTP ${lastStatus}): ${lastBody}` }), {
+      return new Response(JSON.stringify({ ok: false, erros }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Folder, Plus, Trash2, Upload, Download, UserPlus, Search, X, CheckSquare, Tag, History, Loader2 } from "lucide-react";
+import { Folder, FolderInput, Plus, Trash2, Upload, Download, UserPlus, Search, X, CheckSquare, Tag, History, Loader2 } from "lucide-react";
 import { isValidPhone, formatPhoneBR } from "@/lib/phone";
 import { parseCSV, downloadCSV, templateLeadsCSV } from "@/lib/csv";
 
@@ -46,6 +46,8 @@ function LeadsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [excluindoMassa, setExcluindoMassa] = useState(false);
+  const [movendoMassa, setMovendoMassa] = useState(false);
+  const [showMoverPasta, setShowMoverPasta] = useState(false);
   const [tagsLead, setTagsLead] = useState<Lead | null>(null);
   const [historicoLead, setHistoricoLead] = useState<Lead | null>(null);
 
@@ -109,6 +111,36 @@ function LeadsPage() {
     if (!confirm("Excluir contato?")) return;
     await supabase.from("leads").delete().eq("id", id);
     load();
+  };
+
+  const selecionarProximos = (n: number) => {
+    const disponiveis = filtered.filter((l) => !selecionados.has(l.id));
+    const proximos = disponiveis.slice(0, n);
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      proximos.forEach((l) => next.add(l.id));
+      return next;
+    });
+  };
+
+  const moverParaPasta = async (pastaId: string | null) => {
+    if (!selecionados.size) return;
+    setMovendoMassa(true);
+    try {
+      const ids = [...selecionados];
+      for (let i = 0; i < ids.length; i += 200) {
+        const lote = ids.slice(i, i + 200);
+        const { error } = await supabase.from("leads").update({ pasta_id: pastaId }).in("id", lote);
+        if (error) throw error;
+      }
+      toast.success(`${ids.length} contato(s) movido(s)`);
+      setShowMoverPasta(false);
+      load();
+    } catch (e) {
+      toast.error("Erro ao mover: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setMovendoMassa(false);
+    }
   };
 
   const excluirSelecionados = async () => {
@@ -299,14 +331,41 @@ function LeadsPage() {
           </div>
         </div>
 
-        {/* Barra de seleção em massa */}
+        {/* Barra de seleção rápida — sempre visível */}
+        <div className="px-3 sm:px-4 py-2 border-b bg-muted/30 flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide shrink-0">Próximos:</span>
+          {[10, 20, 50, 100, 500].map((n) => {
+            const disponiveis = filtered.filter((l) => !selecionados.has(l.id)).length;
+            if (disponiveis === 0) return null;
+            return (
+              <Button key={n} variant="outline" size="sm" className="h-6 px-2.5 text-xs font-medium" onClick={() => selecionarProximos(n)}>
+                +{Math.min(n, disponiveis)}
+              </Button>
+            );
+          })}
+          <span className="text-xs text-muted-foreground ml-auto">
+            {filtered.filter((l) => !selecionados.has(l.id)).length} disponíveis
+          </span>
+        </div>
+
+        {/* Barra de ações em massa */}
         {selecionados.size > 0 && (
           <div className="px-3 sm:px-4 py-2.5 bg-primary/5 border-b border-primary/20 flex items-center gap-2 sm:gap-3">
             <CheckSquare className="w-4 h-4 text-primary shrink-0" />
             <span className="text-sm font-medium text-primary flex-1">
-              <span className="sm:hidden">{selecionados.size} selecionado{selecionados.size !== 1 ? "s" : ""}</span>
-              <span className="hidden sm:inline">{selecionados.size} contato{selecionados.size !== 1 ? "s" : ""} selecionado{selecionados.size !== 1 ? "s" : ""}</span>
+              {selecionados.size} contato{selecionados.size !== 1 ? "s" : ""} selecionado{selecionados.size !== 1 ? "s" : ""}
             </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowMoverPasta(true)}
+              disabled={movendoMassa}
+              className="gap-1.5"
+            >
+              <FolderInput className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Mover para pasta</span>
+              <span className="sm:hidden">Mover</span>
+            </Button>
             <Button size="sm" variant="destructive" onClick={excluirSelecionados} disabled={excluindoMassa} className="gap-1.5">
               <Trash2 className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{excluindoMassa ? "Excluindo…" : `Excluir ${selecionados.size}`}</span>
@@ -431,6 +490,14 @@ function LeadsPage() {
 
       <ImportModal open={showImport} onClose={() => setShowImport(false)} pastas={pastas} onDone={load} />
       <AddModal open={showAdd} onClose={() => setShowAdd(false)} pastas={pastas} onDone={load} pastaAtual={pastaSel} />
+      <MoverPastaModal
+        open={showMoverPasta}
+        onClose={() => setShowMoverPasta(false)}
+        pastas={pastas}
+        quantidade={selecionados.size}
+        loading={movendoMassa}
+        onMover={moverParaPasta}
+      />
       {tagsLead && (
         <TagsModal
           lead={tagsLead}
@@ -445,6 +512,63 @@ function LeadsPage() {
         <HistoricoModal lead={historicoLead} onClose={() => setHistoricoLead(null)} />
       )}
     </div>
+  );
+}
+
+function MoverPastaModal({
+  open, onClose, pastas, quantidade, loading, onMover,
+}: {
+  open: boolean;
+  onClose: () => void;
+  pastas: Pasta[];
+  quantidade: number;
+  loading: boolean;
+  onMover: (pastaId: string | null) => void;
+}) {
+  const [destino, setDestino] = useState<string>("__sem_pasta__");
+
+  useEffect(() => { if (open) setDestino("__sem_pasta__"); }, [open]);
+
+  const confirmar = () => onMover(destino === "__sem_pasta__" ? null : destino);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FolderInput className="w-4 h-4 text-primary" /> Mover {quantidade} contato{quantidade !== 1 ? "s" : ""}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <p className="text-sm text-muted-foreground">Selecione a pasta de destino:</p>
+          <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+            <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${destino === "__sem_pasta__" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"}`}>
+              <input type="radio" name="pasta-destino" value="__sem_pasta__" checked={destino === "__sem_pasta__"} onChange={() => setDestino("__sem_pasta__")} className="accent-primary" />
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <Folder className="w-4 h-4 text-muted-foreground" /> Sem pasta
+              </span>
+            </label>
+            {pastas.map((p) => (
+              <label key={p.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${destino === p.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"}`}>
+                <input type="radio" name="pasta-destino" value={p.id} checked={destino === p.id} onChange={() => setDestino(p.id)} className="accent-primary" />
+                <span className="flex items-center gap-2 text-sm font-medium flex-1 min-w-0">
+                  <Folder className="w-4 h-4 text-primary shrink-0" />
+                  <span className="truncate">{p.nome}</span>
+                  {p.codigo && <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono">{p.codigo}</span>}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button onClick={confirmar} disabled={loading} className="gap-2">
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+            {loading ? "Movendo…" : `Mover ${quantidade} contato${quantidade !== 1 ? "s" : ""}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
