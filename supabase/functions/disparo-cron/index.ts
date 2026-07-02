@@ -110,6 +110,8 @@ interface MidiaVariacao { url: string; tipo: string; nome: string }
 
 interface Campanha {
   id: string
+  usuario_id: string
+  nome: string
   mensagem: string
   mensagens_variacoes: string[]
   midias_variacoes: MidiaVariacao[]
@@ -123,6 +125,7 @@ interface Campanha {
   midia_url: string | null
   midia_tipo: string | null
   midia_nome: string | null
+  aguardando_confirmacao: boolean
 }
 
 interface ContatoCampanha {
@@ -178,6 +181,39 @@ async function processarDisparo() {
     }
   }
 
+  // Auto-cancela campanhas que estavam aguardando confirmação e o usuário não respondeu a tempo.
+  // Quando o horário de disparo reabre e aguardando_confirmacao ainda é true, o padrão é cancelar.
+  const { data: aguardando } = await supabase
+    .from('campanhas')
+    .select('id, nome, usuario_id, horario_inicio, horario_fim')
+    .eq('status', 'em_andamento')
+    .eq('aguardando_confirmacao', true)
+
+  for (const c of aguardando ?? []) {
+    if (!estaNoHorario(c.horario_inicio ?? '08:00', c.horario_fim ?? '22:00')) continue
+
+    // Horário abriu e usuário não confirmou → cancela contatos pendentes (comportamento padrão)
+    await supabase
+      .from('contatos_campanha')
+      .update({ status: 'cancelado', next_send_at: null })
+      .eq('campanha_id', c.id)
+      .eq('status', 'pendente')
+
+    // Marca notificação de confirmação como respondida
+    await supabase
+      .from('notificacoes')
+      .update({ acao_respondida: true, lida: true })
+      .eq('usuario_id', c.usuario_id)
+      .eq('acao_tipo', 'confirmar_horario')
+      .eq('acao_respondida', false)
+      .filter('acao_dados->>campanha_id', 'eq', c.id)
+
+    await supabase
+      .from('campanhas')
+      .update({ status: 'cancelada', aguardando_confirmacao: false })
+      .eq('id', c.id)
+  }
+
   // Busca campanhas ativas
   const { data: campanhas } = await supabase
     .from('campanhas')
@@ -194,6 +230,61 @@ async function processarDisparo() {
       campanha.midias_variacoes = (c.midias_variacoes as unknown as MidiaVariacao[]) ?? []
 
       if (!estaNoHorario(campanha.horario_inicio ?? '08:00', campanha.horario_fim ?? '22:00')) {
+        // Calcula o próximo horario_inicio em UTC (BRT + 3h)
+        const agora = new Date()
+        const inicioBRT = campanha.horario_inicio ?? '08:00'
+        const [hI, mI] = inicioBRT.split(':').map(Number)
+        const horaBRT = (agora.getUTCHours() - 3 + 24) % 24
+        const minBRT = agora.getUTCMinutes()
+        const totalAgora = horaBRT * 60 + minBRT
+        const totalInicio = hI * 60 + mI
+
+        const proximo = new Date(agora)
+        proximo.setUTCHours((hI + 3) % 24, mI, 0, 0)
+        if (totalAgora >= totalInicio) {
+          proximo.setUTCDate(proximo.getUTCDate() + 1)
+        }
+
+        // Reagenda contatos vencidos para o próximo horario_inicio e captura quantos foram movidos
+        const { data: reschedulados } = await supabase
+          .from('contatos_campanha')
+          .update({ next_send_at: proximo.toISOString() })
+          .eq('campanha_id', campanha.id)
+          .eq('status', 'pendente')
+          .not('next_send_at', 'is', null)
+          .lt('next_send_at', agora.toISOString())
+          .select('id')
+
+        // Se acabamos de reagendar contatos E não há notificação pendente → cria a notificação
+        const foiReschedulado = (reschedulados?.length ?? 0) > 0
+        if (foiReschedulado && !campanha.aguardando_confirmacao) {
+          const { count: totalPendentes } = await supabase
+            .from('contatos_campanha')
+            .select('id', { count: 'exact', head: true })
+            .eq('campanha_id', campanha.id)
+            .eq('status', 'pendente')
+
+          await supabase.from('notificacoes').insert({
+            usuario_id: campanha.usuario_id,
+            titulo: `Campanha pausada: "${campanha.nome}"`,
+            mensagem: `${totalPendentes ?? reschedulados!.length} contatos não foram enviados até ${campanha.horario_fim ?? '22:00'}. Deseja continuar amanhã às ${inicioBRT} ou cancelar os disparos restantes?`,
+            tipo: 'aviso',
+            link: `/campanhas/${campanha.id}`,
+            acao_tipo: 'confirmar_horario',
+            acao_dados: {
+              campanha_id: campanha.id,
+              campanha_nome: campanha.nome,
+              pendentes: totalPendentes ?? reschedulados!.length,
+              horario_inicio: inicioBRT,
+            },
+          })
+
+          await supabase
+            .from('campanhas')
+            .update({ aguardando_confirmacao: true })
+            .eq('id', campanha.id)
+        }
+
         continue
       }
 

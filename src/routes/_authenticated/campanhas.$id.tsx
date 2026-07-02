@@ -183,6 +183,18 @@ function Detalhes() {
     return Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100));
   })();
 
+  const estaForaDoHorario = (inicio: string, fim: string): boolean => {
+    const agora = new Date();
+    const h = (agora.getUTCHours() - 3 + 24) % 24;
+    const m = agora.getUTCMinutes();
+    const total = h * 60 + m;
+    const [hI, mI] = inicio.split(":").map(Number);
+    const [hF, mF] = fim.split(":").map(Number);
+    const inicioMin = hI * 60 + mI;
+    const fimMin = hF === 0 && mF === 0 ? 24 * 60 : hF * 60 + mF;
+    return total < inicioMin || total > fimMin;
+  };
+
   const statusLabel: Record<string, string> = {
     aguardando: "Aguardando",
     agendada: "Agendada",
@@ -298,7 +310,12 @@ function Detalhes() {
         {/* Countdown do próximo disparo */}
         {camp.status === "em_andamento" && pendentesCount > 0 && (
           <div className="pt-2 space-y-1.5">
-            {secondsLeft !== null && secondsLeft > 0 ? (
+            {estaForaDoHorario(camp.horario_inicio ?? "08:00", camp.horario_fim ?? "22:00") ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                <span>Fora do horário de disparo — retoma às {camp.horario_inicio ?? "08:00"}</span>
+              </div>
+            ) : secondsLeft !== null && secondsLeft > 0 ? (
               <>
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Próximo disparo em</span>
