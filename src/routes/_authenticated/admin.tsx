@@ -196,13 +196,13 @@ function AdminPage() {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[500px]">
-              <thead className="border-b text-left text-muted-foreground">
+              <thead className="border-b text-left text-muted-foreground text-xs uppercase tracking-wide">
                 <tr>
                   <th className="px-4 py-3">Usuário</th>
-                  <th className="py-3">E-mail</th>
-                  <th className="py-3 text-right">Conexões WA</th>
-                  <th className="py-3 text-right">Campanhas</th>
-                  <th className="py-3 text-right px-4">Disparos</th>
+                  <th className="px-3 py-3">E-mail</th>
+                  <th className="px-3 py-3 text-right whitespace-nowrap">Conexões WA</th>
+                  <th className="px-3 py-3 text-right">Campanhas</th>
+                  <th className="px-4 py-3 text-right">Disparos</th>
                 </tr>
               </thead>
               <tbody>
@@ -219,11 +219,11 @@ function AdminPage() {
                       className="border-b last:border-0 hover:bg-muted/40 cursor-pointer transition-colors"
                       onClick={() => setFiltroUser(filtroUser === p.id ? "all" : p.id)}
                     >
-                      <td className="px-4 py-3 font-medium">{p.nome || "—"}</td>
-                      <td className="py-3 text-muted-foreground text-xs">{p.email || "—"}</td>
-                      <td className="py-3 text-right">{userConns}</td>
-                      <td className="py-3 text-right">{userCamps.length}</td>
-                      <td className="py-3 text-right px-4">{userSent.toLocaleString("pt-BR")}</td>
+                      <td className="px-4 py-3 font-medium truncate max-w-[140px]">{p.nome || "—"}</td>
+                      <td className="px-3 py-3 text-muted-foreground text-xs truncate max-w-[180px]">{p.email || "—"}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{userConns}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{userCamps.length}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{userSent.toLocaleString("pt-BR")}</td>
                     </tr>
                   );
                 })}
@@ -258,42 +258,52 @@ function AdminPage() {
 
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[640px]">
-              <thead className="border-b text-left text-muted-foreground">
+            <table className="w-full text-sm min-w-[600px]">
+              <thead className="border-b text-left text-muted-foreground text-xs uppercase tracking-wide">
                 <tr>
                   <th className="px-4 py-3">Campanha</th>
-                  <th className="py-3">Usuário</th>
-                  <th className="py-3">Status</th>
-                  <th className="py-3 hidden sm:table-cell text-right">Enviadas</th>
-                  <th className="py-3 hidden sm:table-cell text-right">Total</th>
-                  <th className="py-3">Data</th>
-                  <th className="py-3 px-4"></th>
+                  <th className="px-3 py-3">Usuário</th>
+                  <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3 text-right">Progresso</th>
+                  <th className="px-3 py-3 whitespace-nowrap">Criada em</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
                 {campanhasFiltradas.length === 0 && (
-                  <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Nenhuma campanha encontrada</td></tr>
+                  <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhuma campanha encontrada</td></tr>
                 )}
                 {campanhasFiltradas.map((c) => {
                   const prof = profileMap[c.usuario_id];
                   const st   = STATUS_LABEL[c.status] ?? { label: c.status, class: "bg-muted text-muted-foreground" };
+                  const env  = c.enviadas ?? 0;
+                  const tot  = c.total_contatos ?? 0;
+                  const pct  = tot > 0 ? Math.round((env / tot) * 100) : 0;
                   return (
                     <tr key={c.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
-                      <td className="px-4 py-3 font-medium max-w-[180px] truncate">{c.nome}</td>
-                      <td className="py-3 text-xs text-muted-foreground max-w-[140px] truncate">
+                      <td className="px-4 py-3 font-medium max-w-[200px] truncate">{c.nome}</td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground max-w-[160px] truncate">
                         {prof?.email ?? prof?.nome ?? c.usuario_id.slice(0, 8)}
                       </td>
-                      <td className="py-3">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${st.class}`}>
+                      <td className="px-3 py-3">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${st.class}`}>
                           {st.label}
                         </span>
                       </td>
-                      <td className="py-3 hidden sm:table-cell text-right">{c.enviadas ?? 0}</td>
-                      <td className="py-3 hidden sm:table-cell text-right">{c.total_contatos ?? 0}</td>
-                      <td className="py-3 whitespace-nowrap text-xs text-muted-foreground">
-                        {new Date(c.criada_em).toLocaleDateString("pt-BR")}
+                      <td className="px-3 py-3 text-right whitespace-nowrap">
+                        <span className="font-medium tabular-nums">{env.toLocaleString("pt-BR")}</span>
+                        <span className="text-muted-foreground"> / {tot.toLocaleString("pt-BR")}</span>
+                        {tot > 0 && (
+                          <span className="ml-1.5 text-xs text-muted-foreground">({pct}%)</span>
+                        )}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="px-3 py-3 whitespace-nowrap text-xs text-muted-foreground">
+                        {new Date(c.criada_em).toLocaleString("pt-BR", {
+                          day: "2-digit", month: "2-digit", year: "2-digit",
+                          hour: "2-digit", minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="px-4 py-3">
                         <Link
                           to="/campanhas/$id"
                           params={{ id: c.id }}
