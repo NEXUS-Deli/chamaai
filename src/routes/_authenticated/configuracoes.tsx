@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff, AlertTriangle } from "lucide-react";
+import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff, AlertTriangle, Radio, ShieldCheck } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { canAddConnection } from "@/lib/plans";
 
@@ -20,6 +20,7 @@ interface Instancia {
   instancia: string;
   token: string;
   status: string;
+  webhook_configurado: boolean;
 }
 
 // Chama a Edge Function uazapi-proxy para ações na UAZAPI
@@ -91,6 +92,7 @@ function ConfigPage() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [connectStatus, setConnectStatus] = useState<"idle" | "loading" | "awaiting_scan" | "connected" | "error">("idle");
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [loadingWebhook, setLoadingWebhook] = useState<string | null>(null);
 
   // Interval Refs
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -124,15 +126,15 @@ function ConfigPage() {
   const fetchInstancias = async () => {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("instancias")
-      .select("id, nome, instancia, token, criada_em, status")
+      .select("id, nome, instancia, token, criada_em, status, webhook_configurado")
       .eq("usuario_id", u.user.id)
       .order("criada_em", { ascending: false });
 
     if (error) {
-      // Se o erro for de schema cache (status não reconhecido), busca sem o campo status
-      if (error.message?.includes("status") || error.code === "42703") {
+      // Fallback sem colunas novas se cache desatualizado
+      if (error.message?.includes("status") || error.message?.includes("webhook") || error.code === "42703") {
         const { data: fallbackData, error: fallbackError } = await supabase
           .from("instancias")
           .select("id, nome, instancia, token, criada_em")
@@ -144,10 +146,9 @@ function ConfigPage() {
           return;
         }
         if (fallbackData) {
-          // Normaliza adicionando status padrão e filtra a fixa
           const filteredFallback = fallbackData
             .filter(i => i.instancia !== 'r1b5f62949ba437')
-            .map(i => ({ ...i, status: 'disconnected' }));
+            .map(i => ({ ...i, status: 'disconnected', webhook_configurado: false }));
           setInstancias(filteredFallback as Instancia[]);
         }
         return;
@@ -156,11 +157,15 @@ function ConfigPage() {
       toast.error("Erro ao buscar instâncias: " + error.message);
       return;
     }
-    // Normaliza: garante que status sempre existe e filtra a fixa
+    // Normaliza: garante que colunas sempre existem e filtra a fixa
     if (data) {
-      const filteredData = data
-        .filter(i => i.instancia !== 'r1b5f62949ba437')
-        .map(i => ({ ...i, status: (i as any).status || 'disconnected' }));
+      const filteredData = (data as any[])
+        .filter((i: any) => i.instancia !== 'r1b5f62949ba437')
+        .map((i: any) => ({
+          ...i,
+          status: i.status || 'disconnected',
+          webhook_configurado: i.webhook_configurado ?? false,
+        }));
       setInstancias(filteredData as Instancia[]);
       // Inicia busca de status dinâmico para todas as instâncias
       fetchAllStatuses(filteredData as Instancia[]);
@@ -247,12 +252,13 @@ function ConfigPage() {
       }
 
       // Configura webhook automaticamente para rastreamento de entrega
-      // Nota: create_instance já tentou configurar; esta chamada é um segundo ciclo de fallback
+      let webhookOk = false;
       try {
         const webhookResult = await callProxy('set_webhook', { token: uazapiToken, instanceId: uazapiId });
-        if (!webhookResult?.ok) {
-          console.warn('Webhook não configurado automaticamente:', webhookResult?.message);
-          toast.warning('Instância criada! Configure o webhook manualmente na uazapi para rastrear entregas.');
+        webhookOk = webhookResult?.ok === true;
+        if (webhookOk && dbData) {
+          await (supabase as any).from("instancias").update({ webhook_configurado: true }).eq("id", dbData.id);
+          dbData = { ...dbData, webhook_configurado: true };
         }
       } catch {
         console.warn('Webhook não configurado automaticamente');
@@ -270,6 +276,24 @@ function ConfigPage() {
     }
   };
 
+
+  const configurarWebhook = async (inst: Instancia) => {
+    setLoadingWebhook(inst.id);
+    try {
+      const result = await callProxy('set_webhook', { token: inst.token, instanceId: inst.instancia });
+      if (result?.ok) {
+        await (supabase as any).from("instancias").update({ webhook_configurado: true }).eq("id", inst.id);
+        setInstancias(prev => prev.map(i => i.id === inst.id ? { ...i, webhook_configurado: true } : i));
+        toast.success("Rastreamento de entrega ativado com sucesso!");
+      } else {
+        toast.error("Não foi possível ativar o rastreamento. Verifique se a instância está conectada.");
+      }
+    } catch {
+      toast.error("Erro ao configurar rastreamento.");
+    } finally {
+      setLoadingWebhook(null);
+    }
+  };
 
   const removerInstancia = async (inst: Instancia) => {
     if (!confirm(`Tem certeza que deseja excluir "${inst.nome}"? Esta ação é irreversível.`)) return;
@@ -529,35 +553,76 @@ function ConfigPage() {
           </p>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
-          {instancias.map((inst) => (
-            <Card key={inst.id} className="p-4 flex flex-col justify-between min-h-44">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-bold text-lg flex items-center gap-2">
-                    <Smartphone className="w-4 h-4 text-primary" />
-                    {inst.nome}
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1 font-mono">
-                    {inst.instancia}
-                  </p>
-                  <div className="mt-1">{statusBadge(inst.id, inst.status)}</div>
+          {instancias.map((inst) => {
+            const isWebhookLoading = loadingWebhook === inst.id;
+            return (
+              <Card key={inst.id} className="p-4 flex flex-col gap-3">
+                <div className="flex justify-between items-start">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-lg flex items-center gap-2 truncate">
+                      <Smartphone className="w-4 h-4 text-primary shrink-0" />
+                      <span className="truncate">{inst.nome}</span>
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1 font-mono truncate">
+                      {inst.instancia}
+                    </p>
+                    <div className="mt-1.5">{statusBadge(inst.id, inst.status)}</div>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => removerInstancia(inst)} disabled={loading} className="shrink-0">
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </Button>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => removerInstancia(inst)} disabled={loading}>
-                  <Trash2 className="w-4 h-4 text-red-500" />
-                </Button>
-              </div>
-              <div className="flex gap-2 mt-2">
-                <Button variant="default" className="flex-1 text-xs" onClick={() => openConnectModal(inst)}>
-                  <QrCode className="w-4 h-4 mr-2" />
-                  Conectar
-                </Button>
-                <Button variant="outline" className="flex-1 text-xs" onClick={() => handleDisconnect(inst)}>
-                  <PowerOff className="w-4 h-4 mr-2" />
-                  Desconectar
-                </Button>
-              </div>
-            </Card>
-          ))}
+
+                {/* Rastreamento de entrega */}
+                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-muted/50 border">
+                  {inst.webhook_configurado ? (
+                    <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400 font-medium">
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                      Rastreamento de entrega ativo
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-yellow-700 dark:text-yellow-400 font-medium">
+                      <Radio className="w-3.5 h-3.5 shrink-0" />
+                      Rastreamento inativo
+                    </div>
+                  )}
+                  {!inst.webhook_configurado && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-xs px-2 shrink-0"
+                      onClick={() => configurarWebhook(inst)}
+                      disabled={isWebhookLoading}
+                    >
+                      {isWebhookLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Ativar"}
+                    </Button>
+                  )}
+                  {inst.webhook_configurado && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs px-2 shrink-0 text-muted-foreground"
+                      onClick={() => configurarWebhook(inst)}
+                      disabled={isWebhookLoading}
+                    >
+                      {isWebhookLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Reconfigurar"}
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button variant="default" className="flex-1 text-xs" onClick={() => openConnectModal(inst)}>
+                    <QrCode className="w-4 h-4 mr-2" />
+                    Conectar
+                  </Button>
+                  <Button variant="outline" className="flex-1 text-xs" onClick={() => handleDisconnect(inst)}>
+                    <PowerOff className="w-4 h-4 mr-2" />
+                    Desconectar
+                  </Button>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       </div>
 

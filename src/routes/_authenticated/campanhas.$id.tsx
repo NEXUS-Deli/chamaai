@@ -166,6 +166,7 @@ function Detalhes() {
   // Derivar contadores do array contatos (mais atualizado que camp.enviadas do DB)
   const enviadasCount = contatos.filter((c) => ["enviado", "entregue", "lido"].includes(c.status)).length;
   const entreguesCount = contatos.filter((c) => ["entregue", "lido"].includes(c.status)).length;
+  const lidosCount = contatos.filter((c) => c.status === "lido").length;
   const errosCount = contatos.filter((c) => ["erro", "invalido"].includes(c.status)).length;
   const pendentesCount = contatos.filter((c) => c.status === "pendente").length;
   const totalCount = contatos.length || camp.total_contatos || 0;
@@ -339,18 +340,42 @@ function Detalhes() {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { l: "Enviadas", v: enviadasCount },
-          { l: "Entregues", v: entreguesCount },
-          { l: "Erros / Inválidos", v: errosCount },
-          { l: "Pendentes", v: pendentesCount },
-        ].map((s) => (
-          <Card key={s.l} className="p-5">
-            <div className="text-sm text-muted-foreground">{s.l}</div>
-            <div className="text-2xl font-bold">{s.v}</div>
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <Card className="p-5">
+          <div className="text-xs text-muted-foreground">Enviadas</div>
+          <div className="text-2xl font-bold">{enviadasCount}</div>
+          {totalCount > 0 && (
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {Math.round((enviadasCount / totalCount) * 100)}% do total
+            </div>
+          )}
+        </Card>
+        <Card className="p-5">
+          <div className="text-xs text-muted-foreground">Entregues</div>
+          <div className="text-2xl font-bold">{entreguesCount}</div>
+          {enviadasCount > 0 && (
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {Math.round((entreguesCount / enviadasCount) * 100)}% das enviadas
+            </div>
+          )}
+        </Card>
+        <Card className="p-5">
+          <div className="text-xs text-muted-foreground">Lidas</div>
+          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{lidosCount}</div>
+          {entreguesCount > 0 && (
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {Math.round((lidosCount / entreguesCount) * 100)}% das entregues
+            </div>
+          )}
+        </Card>
+        <Card className="p-5">
+          <div className="text-xs text-muted-foreground">Erros / Inválidos</div>
+          <div className="text-2xl font-bold text-destructive">{errosCount}</div>
+        </Card>
+        <Card className="p-5">
+          <div className="text-xs text-muted-foreground">Pendentes</div>
+          <div className="text-2xl font-bold">{pendentesCount}</div>
+        </Card>
       </div>
 
       {/* Configurações + Mídia + Delay médio */}

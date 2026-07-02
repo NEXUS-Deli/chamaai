@@ -23,7 +23,6 @@ serve(async (req) => {
     const body = await req.json()
     const event = body?.event ?? body?.type ?? ''
 
-    // Handles: messages.update (delivery/read ACK)
     if (!event.includes('messages') && !event.includes('message')) {
       return new Response(JSON.stringify({ ok: true, skipped: event }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -32,20 +31,17 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    // Normalize to array — uazapi sends either an array or a single object
     const updates: unknown[] = Array.isArray(body?.data) ? body.data : body?.data ? [body.data] : []
 
     let entregues = 0
     for (const update of updates) {
       const u = update as Record<string, unknown>
 
-      // Extract messageId — two common formats
       const msgId: string | undefined =
         (u?.key as Record<string, unknown>)?.id as string ??
         u?.msgId as string ??
         u?.id as string
 
-      // Extract status — numeric or string
       const rawStatus =
         (u?.update as Record<string, unknown>)?.status ??
         u?.ACK ??
@@ -60,29 +56,39 @@ serve(async (req) => {
 
       if (!msgId || numStatus < STATUS_ENTREGUE) continue
 
-      // Find contact by messageId
       const { data: contato } = await supabase
         .from('contatos_campanha')
         .select('id, campanha_id, status')
         .eq('mensagem_id', msgId)
         .maybeSingle()
 
-      if (!contato || contato.status === 'entregue' || contato.status === 'lido') continue
+      if (!contato) continue
+      if (contato.status === 'lido') continue
 
       const novoStatus = numStatus >= STATUS_LIDO ? 'lido' : 'entregue'
+
+      // Skip no-op upgrades
+      if (contato.status === 'entregue' && novoStatus === 'entregue') continue
 
       await supabase
         .from('contatos_campanha')
         .update({ status: novoStatus })
         .eq('id', contato.id)
 
-      // Increment entregues counter on campaign
-      await supabase.rpc('incrementar_entregues', { p_campanha_id: contato.campanha_id })
+      // Increment entregues when going from enviado → entregue or lido
+      if (contato.status === 'enviado') {
+        await supabase.rpc('incrementar_entregues', { p_campanha_id: contato.campanha_id })
+      }
+
+      // Increment lidos when status reaches lido (from either enviado or entregue)
+      if (novoStatus === 'lido') {
+        await supabase.rpc('incrementar_lidos', { p_campanha_id: contato.campanha_id })
+      }
 
       entregues++
     }
 
-    console.log(`[disparo-webhook] event=${event} entregues=${entregues}`)
+    console.log(`[disparo-webhook] event=${event} processados=${entregues}`)
     return new Response(JSON.stringify({ ok: true, entregues }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

@@ -11,7 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  Loader2, ChevronRight, UploadCloud, X, Plus, Trash2, FileText, Layers,
+  Loader2, ChevronRight, UploadCloud, X, Plus, Trash2, FileText, Layers, Check,
+  Image as ImageIcon, Video, Music,
 } from "lucide-react";
 import { isValidPhone, toE164BR } from "@/lib/phone";
 import { parseCSV } from "@/lib/csv";
@@ -22,6 +23,33 @@ export const Route = createFileRoute("/_authenticated/campanhas/nova")({
 
 interface Contato { telefone: string; nome: string; empresa: string }
 interface Instancia { id: string; nome: string; instancia: string; token: string | null }
+
+function MidiaThumbUrl({ url, nome, tipo, onRemove }: { url: string; nome: string; tipo: string; onRemove: () => void }) {
+  return (
+    <div className="relative group w-20 h-20 rounded-md border bg-muted overflow-hidden flex-shrink-0">
+      {tipo === "image" || tipo.startsWith("image/") ? (
+        <img src={url} alt={nome} className="w-full h-full object-cover" />
+      ) : tipo === "video" || tipo.startsWith("video/") ? (
+        <video src={url} className="w-full h-full object-cover" muted />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
+          <FileText className="w-6 h-6 text-muted-foreground" />
+          <span className="text-[10px] text-muted-foreground text-center leading-tight line-clamp-2">{nome}</span>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <X className="w-3 h-3" />
+      </button>
+      <div className="absolute bottom-0 left-0 right-0 bg-primary/80 text-[9px] font-semibold text-white text-center py-0.5 leading-none">
+        template
+      </div>
+    </div>
+  );
+}
 
 function MidiaThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
   const url = URL.createObjectURL(file);
@@ -72,8 +100,10 @@ function NovaCampanha() {
   const [instancias, setInstancias] = useState<Instancia[]>([]);
   const [instanciasSelecionadas, setInstanciasSelecionadas] = useState<string[]>([]);
 
-  // Variações de mídia — até 10 arquivos
+  // Variações de mídia — arquivos locais e templates salvos (máx. 10 no total)
   const [midiasFiles, setMidiasFiles] = useState<File[]>([]);
+  const [midiasTemplates, setMidiasTemplates] = useState<{ url: string; nome: string; tipo: string; mimetype: string }[]>([]);
+  const [midiaTemplateModal, setMidiaTemplateModal] = useState(false);
 
   const [agendarPara, setAgendarPara] = useState("");
 
@@ -168,18 +198,28 @@ function NovaCampanha() {
   };
 
   const uploadMidias = async (): Promise<{ url: string; nome: string; tipo: string }[]> => {
-    if (midiasFiles.length === 0) return [];
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return [];
     const resultados: { url: string; nome: string; tipo: string }[] = [];
-    for (const file of midiasFiles) {
-      const ext = file.name.split(".").pop();
-      const fileName = `${u.user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await supabase.storage.from("midias").upload(fileName, file);
-      if (error) { toast.error("Erro ao enviar mídia: " + error.message); continue; }
-      const { data: urlData } = supabase.storage.from("midias").getPublicUrl(fileName);
-      resultados.push({ url: urlData.publicUrl, nome: file.name, tipo: file.type });
+
+    // Upload de arquivos locais
+    if (midiasFiles.length > 0) {
+      const { data: u } = await supabase.auth.getUser();
+      if (u.user) {
+        for (const file of midiasFiles) {
+          const ext = file.name.split(".").pop();
+          const fileName = `${u.user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error } = await supabase.storage.from("midias").upload(fileName, file);
+          if (error) { toast.error("Erro ao enviar mídia: " + error.message); continue; }
+          const { data: urlData } = supabase.storage.from("midias").getPublicUrl(fileName);
+          resultados.push({ url: urlData.publicUrl, nome: file.name, tipo: file.type });
+        }
+      }
     }
+
+    // Mídias dos templates (já têm URL pública, não precisam de upload)
+    for (const t of midiasTemplates) {
+      resultados.push({ url: t.url, nome: t.nome, tipo: t.mimetype });
+    }
+
     return resultados;
   };
 
@@ -201,18 +241,37 @@ function NovaCampanha() {
 
   const adicionarMidia = (files: FileList | null) => {
     if (!files) return;
+    const slotsDisponiveis = 10 - midiasTemplates.length;
     setMidiasFiles((prev) => {
       const novos = Array.from(files).filter((f) => !prev.some((p) => p.name === f.name && p.size === f.size));
       const combinados = [...prev, ...novos];
-      if (combinados.length > 10) {
+      if (combinados.length > slotsDisponiveis) {
         toast.warning("Máximo de 10 mídias por campanha.");
-        return combinados.slice(0, 10);
+        return combinados.slice(0, slotsDisponiveis);
       }
       return combinados;
     });
   };
 
   const removerMidia = (index: number) => setMidiasFiles((prev) => prev.filter((_, i) => i !== index));
+
+  const removerMidiaTemplate = (index: number) =>
+    setMidiasTemplates((prev) => prev.filter((_, i) => i !== index));
+
+  const adicionarMidiasTemplate = (items: { url: string; nome: string; tipo: string; mimetype: string }[]) => {
+    setMidiasTemplates((prev) => {
+      const novos = items.filter((item) => !prev.some((p) => p.url === item.url));
+      const combinados = [...prev, ...novos];
+      const total = combinados.length + midiasFiles.length;
+      if (total > 10) {
+        toast.warning("Máximo de 10 mídias por campanha.");
+        return combinados.slice(0, 10 - midiasFiles.length);
+      }
+      return combinados;
+    });
+    setMidiaTemplateModal(false);
+    toast.success(`${items.length} mídia(s) adicionada(s) dos templates`);
+  };
 
   const disparar = async () => {
     if (instanciasSelecionadas.length === 0) return toast.error("Selecione ao menos uma instância de WhatsApp.");
@@ -273,6 +332,7 @@ function NovaCampanha() {
   };
 
   const totalContatos = origem === "csv" ? contatosCSV.length : leadsSel.length;
+  const totalMidias = midiasFiles.length + midiasTemplates.length;
   const mensagemPrincipal = mensagensVariacoes.length > 0 ? `${mensagensVariacoes.length} variação(ões)` : mensagem ? "1 mensagem" : "—";
   const instSelecionadasNomes = instancias.filter((i) => instanciasSelecionadas.includes(i.id)).map((i) => i.nome);
 
@@ -417,52 +477,28 @@ function NovaCampanha() {
 
             {/* Variações de mídia */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <Label>
                   Variações de mídia{" "}
                   <span className="text-xs text-muted-foreground">
-                    (imagens, vídeos ou documentos — o sistema sorteia uma por envio, máx. 10)
+                    (o sistema sorteia uma por envio — máx. 10)
                   </span>
                 </Label>
-                {midiasFiles.length < 10 && (
-                  <label className="cursor-pointer">
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <span>
-                        <Plus className="w-3 h-3 mr-1" /> Adicionar mídia
-                      </span>
+                {totalMidias < 10 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMidiaTemplateModal(true)}
+                      className="gap-1.5"
+                    >
+                      <Layers className="w-3 h-3" /> Dos templates
                     </Button>
-                    <input
-                      type="file"
-                      accept="image/*,video/*,.pdf"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => adicionarMidia(e.target.files)}
-                    />
-                  </label>
-                )}
-              </div>
-
-              {midiasFiles.length === 0 ? (
-                <label className="cursor-pointer flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-lg text-muted-foreground hover:border-primary/50 transition-colors">
-                  <UploadCloud className="w-8 h-8" />
-                  <span className="text-sm">Clique para adicionar imagens, vídeos ou documentos</span>
-                  <span className="text-xs">Sem mídia — apenas texto será enviado</span>
-                  <input
-                    type="file"
-                    accept="image/*,video/*,.pdf"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => adicionarMidia(e.target.files)}
-                  />
-                </label>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {midiasFiles.map((f, i) => (
-                    <MidiaThumb key={i} file={f} onRemove={() => removerMidia(i)} />
-                  ))}
-                  {midiasFiles.length < 10 && (
-                    <label className="cursor-pointer w-20 h-20 rounded-md border-2 border-dashed flex items-center justify-center text-muted-foreground hover:border-primary/50 transition-colors flex-shrink-0">
-                      <Plus className="w-6 h-6" />
+                    <label className="cursor-pointer">
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <span><Plus className="w-3 h-3 mr-1" /> Arquivo local</span>
+                      </Button>
                       <input
                         type="file"
                         accept="image/*,video/*,.pdf"
@@ -471,13 +507,48 @@ function NovaCampanha() {
                         onChange={(e) => adicionarMidia(e.target.files)}
                       />
                     </label>
-                  )}
+                  </div>
+                )}
+              </div>
+
+              {totalMidias === 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="cursor-pointer flex flex-col items-center justify-center gap-2 p-5 border-2 border-dashed rounded-lg text-muted-foreground hover:border-primary/50 transition-colors">
+                    <UploadCloud className="w-6 h-6" />
+                    <span className="text-sm font-medium">Enviar arquivo</span>
+                    <span className="text-xs opacity-70">imagens, vídeos, pdf</span>
+                    <input
+                      type="file"
+                      accept="image/*,video/*,.pdf"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => adicionarMidia(e.target.files)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setMidiaTemplateModal(true)}
+                    className="flex flex-col items-center justify-center gap-2 p-5 border-2 border-dashed rounded-lg text-muted-foreground hover:border-primary/50 transition-colors"
+                  >
+                    <Layers className="w-6 h-6" />
+                    <span className="text-sm font-medium">Dos templates</span>
+                    <span className="text-xs opacity-70">mídias salvas</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {midiasFiles.map((f, i) => (
+                    <MidiaThumb key={`file-${i}`} file={f} onRemove={() => removerMidia(i)} />
+                  ))}
+                  {midiasTemplates.map((t, i) => (
+                    <MidiaThumbUrl key={`tpl-${i}`} url={t.url} nome={t.nome} tipo={t.tipo} onRemove={() => removerMidiaTemplate(i)} />
+                  ))}
                 </div>
               )}
 
-              {midiasFiles.length > 0 && (
+              {totalMidias > 0 && (
                 <p className="text-xs text-green-600 font-medium">
-                  {midiasFiles.length} mídia(s) — o sistema sorteia qual será enviada para cada contato
+                  {totalMidias} mídia(s) — o sistema sorteia qual será enviada para cada contato
                 </p>
               )}
             </div>
@@ -607,11 +678,14 @@ function NovaCampanha() {
               <div><Label className="text-muted-foreground">Mensagens</Label><p>{mensagemPrincipal}</p></div>
               <div>
                 <Label className="text-muted-foreground">Mídias</Label>
-                <p>{midiasFiles.length > 0 ? `${midiasFiles.length} arquivo(s)` : "Nenhuma"}</p>
-                {midiasFiles.length > 0 && (
+                <p>{totalMidias > 0 ? `${totalMidias} arquivo(s)` : "Nenhuma"}</p>
+                {totalMidias > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
                     {midiasFiles.map((f, i) => (
-                      <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded truncate max-w-[140px]">{f.name}</span>
+                      <span key={`f-${i}`} className="text-xs bg-muted px-2 py-0.5 rounded truncate max-w-[140px]">{f.name}</span>
+                    ))}
+                    {midiasTemplates.map((t, i) => (
+                      <span key={`t-${i}`} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded truncate max-w-[140px]">{t.nome}</span>
                     ))}
                   </div>
                 )}
@@ -654,7 +728,154 @@ function NovaCampanha() {
           toast.success(`${msgs.length} variação(ões) carregada(s) do template!`);
         }}
       />
+
+      <LoadMidiaTemplateModal
+        open={midiaTemplateModal}
+        onClose={() => setMidiaTemplateModal(false)}
+        jaAdicionadas={midiasTemplates.map((t) => t.url)}
+        limite={10 - midiasFiles.length - midiasTemplates.length}
+        onAdicionar={(items) => {
+          adicionarMidiasTemplate(items);
+          setMidiaTemplateModal(false);
+        }}
+      />
     </div>
+  );
+}
+
+interface MediaTemplateItem {
+  id: string;
+  nome: string;
+  url: string;
+  tipo: string;
+  mimetype: string;
+  storage_path: string;
+}
+
+function LoadMidiaTemplateModal({
+  open,
+  onClose,
+  jaAdicionadas,
+  limite,
+  onAdicionar,
+}: {
+  open: boolean;
+  onClose: () => void;
+  jaAdicionadas: string[];
+  limite: number;
+  onAdicionar: (items: { url: string; nome: string; tipo: string; mimetype: string }[]) => void;
+}) {
+  const [midias, setMidias] = useState<MediaTemplateItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!open) { setSelecionadas(new Set()); return; }
+    setLoading(true);
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      const { data } = await (supabase as any)
+        .from("media_templates")
+        .select("id,nome,url,tipo,mimetype,storage_path")
+        .eq("usuario_id", u.user.id)
+        .order("criado_em", { ascending: false });
+      setMidias((data ?? []) as MediaTemplateItem[]);
+      setLoading(false);
+    })();
+  }, [open]);
+
+  const toggleSel = (url: string) => {
+    setSelecionadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) { next.delete(url); return next; }
+      if (next.size >= limite) return prev;
+      next.add(url);
+      return next;
+    });
+  };
+
+  const confirmar = () => {
+    const items = midias
+      .filter((m) => selecionadas.has(m.url))
+      .map((m) => ({ url: m.url, nome: m.nome, tipo: m.tipo, mimetype: m.mimetype }));
+    onAdicionar(items);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="w-5 h-5 text-primary" /> Selecionar mídias dos templates
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Selecione até {limite} mídia(s). Já adicionadas: {jaAdicionadas.length}.
+          </p>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto py-2">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : midias.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-10">
+              Nenhuma mídia salva. Adicione em <strong>Templates → Mídias</strong>.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 p-1">
+              {midias.map((m) => {
+                const jaEsta = jaAdicionadas.includes(m.url);
+                const sel = selecionadas.has(m.url);
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    disabled={jaEsta}
+                    onClick={() => toggleSel(m.url)}
+                    className={`relative rounded-lg border-2 overflow-hidden aspect-square transition-all ${
+                      jaEsta
+                        ? "opacity-40 cursor-not-allowed border-muted"
+                        : sel
+                        ? "border-primary ring-2 ring-primary/30"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    {m.tipo === "image" ? (
+                      <img src={m.url} alt={m.nome} className="w-full h-full object-cover" />
+                    ) : m.tipo === "video" ? (
+                      <video src={m.url} className="w-full h-full object-cover" muted />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground text-xs p-2">
+                        <FileText className="w-8 h-8" />
+                        <span className="truncate w-full text-center">{m.nome}</span>
+                      </div>
+                    )}
+                    {sel && (
+                      <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                        <Check className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-1.5 py-1">
+                      <p className="text-white text-xs truncate">{m.nome}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={confirmar} disabled={selecionadas.size === 0} className="gap-2">
+            <Check className="w-4 h-4" />
+            Adicionar {selecionadas.size > 0 ? `${selecionadas.size} mídia(s)` : ""}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
