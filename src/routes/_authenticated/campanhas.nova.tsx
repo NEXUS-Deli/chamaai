@@ -117,8 +117,6 @@ function NovaCampanha() {
   const [origem, setOrigem] = useState<"csv" | "lista">("csv");
   const [loading, setLoading] = useState(false);
   const [templateModal, setTemplateModal] = useState(false);
-  const [templateModalKey, setTemplateModalKey] = useState(0);
-  const [midiaTemplateModalKey, setMidiaTemplateModalKey] = useState(0);
 
   // Filtro: excluir leads já contactados em campanhas anteriores
   const [excluirJaContactados, setExcluirJaContactados] = useState(false);
@@ -832,27 +830,21 @@ function NovaCampanha() {
       </div>
 
       <LoadTemplateModal
-        key={templateModalKey}
         open={templateModal}
-        onClose={() => { setTemplateModal(false); setTemplateModalKey((k) => k + 1); }}
+        onClose={() => setTemplateModal(false)}
         onCarregar={(msgs) => {
           setMensagensVariacoes(msgs);
           setTemplateModal(false);
-          setTemplateModalKey((k) => k + 1);
           toast.success(`${msgs.length} variação(ões) carregada(s) do template!`);
         }}
       />
 
       <LoadMidiaTemplateModal
-        key={midiaTemplateModalKey}
         open={midiaTemplateModal}
-        onClose={() => { setMidiaTemplateModal(false); setMidiaTemplateModalKey((k) => k + 1); }}
+        onClose={() => setMidiaTemplateModal(false)}
         jaAdicionadas={midiasTemplates.map((t) => t.url)}
         limite={10 - midiasFiles.length - midiasTemplates.length}
-        onAdicionar={(items) => {
-          adicionarMidiasTemplate(items);
-          setMidiaTemplateModalKey((k) => k + 1);
-        }}
+        onAdicionar={adicionarMidiasTemplate}
       />
     </div>
   );
