@@ -181,8 +181,8 @@ async function processarDisparo() {
     }
   }
 
-  // Auto-cancela campanhas que estavam aguardando confirmação e o usuário não respondeu a tempo.
-  // Quando o horário de disparo reabre e aguardando_confirmacao ainda é true, o padrão é cancelar.
+  // Retoma automaticamente campanhas que estavam aguardando (horário fechou mas agora abriu de novo).
+  // O comportamento correto é RETOMAR — o usuário cancela manualmente se não quiser continuar.
   const { data: aguardando } = await supabase
     .from('campanhas')
     .select('id, nome, usuario_id, horario_inicio, horario_fim')
@@ -192,14 +192,7 @@ async function processarDisparo() {
   for (const c of aguardando ?? []) {
     if (!estaNoHorario(c.horario_inicio ?? '08:00', c.horario_fim ?? '22:00')) continue
 
-    // Horário abriu e usuário não confirmou → cancela contatos pendentes (comportamento padrão)
-    await supabase
-      .from('contatos_campanha')
-      .update({ status: 'cancelado', next_send_at: null })
-      .eq('campanha_id', c.id)
-      .eq('status', 'pendente')
-
-    // Marca notificação de confirmação como respondida
+    // Horário abriu → limpa o flag para a campanha retomar normalmente
     await supabase
       .from('notificacoes')
       .update({ acao_respondida: true, lida: true })
@@ -210,7 +203,7 @@ async function processarDisparo() {
 
     await supabase
       .from('campanhas')
-      .update({ status: 'cancelada', aguardando_confirmacao: false })
+      .update({ aguardando_confirmacao: false })
       .eq('id', c.id)
   }
 
@@ -267,7 +260,7 @@ async function processarDisparo() {
           await supabase.from('notificacoes').insert({
             usuario_id: campanha.usuario_id,
             titulo: `Campanha pausada: "${campanha.nome}"`,
-            mensagem: `${totalPendentes ?? reschedulados!.length} contatos não foram enviados até ${campanha.horario_fim ?? '22:00'}. Deseja continuar amanhã às ${inicioBRT} ou cancelar os disparos restantes?`,
+            mensagem: `${totalPendentes ?? reschedulados!.length} contato(s) não foram enviados até ${campanha.horario_fim ?? '22:00'}. A campanha retomará automaticamente amanhã às ${inicioBRT}. Cancele se não quiser continuar.`,
             tipo: 'aviso',
             link: `/campanhas/${campanha.id}`,
             acao_tipo: 'confirmar_horario',

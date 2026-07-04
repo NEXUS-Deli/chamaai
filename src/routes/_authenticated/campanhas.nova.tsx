@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, Dialog
 import { toast } from "sonner";
 import {
   Loader2, ChevronRight, UploadCloud, X, Plus, Trash2, FileText, Layers, Check,
-  Image as ImageIcon, Video, Music,
+  Image as ImageIcon, Video, Music, UserX,
 } from "lucide-react";
 import { isValidPhone, toE164BR } from "@/lib/phone";
 import { parseCSV } from "@/lib/csv";
@@ -117,6 +117,13 @@ function NovaCampanha() {
   const [origem, setOrigem] = useState<"csv" | "lista">("csv");
   const [loading, setLoading] = useState(false);
   const [templateModal, setTemplateModal] = useState(false);
+  const [templateModalKey, setTemplateModalKey] = useState(0);
+  const [midiaTemplateModalKey, setMidiaTemplateModalKey] = useState(0);
+
+  // Filtro: excluir leads já contactados em campanhas anteriores
+  const [excluirJaContactados, setExcluirJaContactados] = useState(false);
+  const [jaContactados, setJaContactados] = useState<Set<string>>(new Set());
+  const [loadingFiltro, setLoadingFiltro] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -192,9 +199,46 @@ function NovaCampanha() {
     toast.success(`${cs.length} contatos válidos`);
   };
 
+  // Quando o filtro está ativo ou a lista de leads muda, consulta quais já foram contactados
+  useEffect(() => {
+    if (!excluirJaContactados) {
+      setJaContactados(new Set());
+      return;
+    }
+    const telefones = origem === "csv"
+      ? contatosCSV.map((c) => c.telefone)
+      : leadsDaPasta.map((l) => l.telefone);
+    if (telefones.length === 0) { setJaContactados(new Set()); return; }
+
+    setLoadingFiltro(true);
+    (async () => {
+      const BATCH = 500;
+      const resultado = new Set<string>();
+      for (let i = 0; i < telefones.length; i += BATCH) {
+        const lote = telefones.slice(i, i + BATCH);
+        const { data } = await supabase
+          .from("contatos_campanha")
+          .select("telefone")
+          .in("telefone", lote)
+          .in("status", ["enviado", "entregue", "lido"]);
+        (data ?? []).forEach((r: any) => resultado.add(r.telefone));
+      }
+      setJaContactados(resultado);
+      setLoadingFiltro(false);
+    })();
+  }, [excluirJaContactados, origem, contatosCSV, leadsDaPasta]);
+
   const getContatos = (): Contato[] => {
-    if (origem === "csv") return contatosCSV;
-    return leadsDaPasta.filter((l) => leadsSelSet.has(l.telefone));
+    let lista: Contato[];
+    if (origem === "csv") {
+      lista = contatosCSV;
+    } else {
+      lista = leadsDaPasta.filter((l) => leadsSelSet.has(l.telefone));
+    }
+    if (excluirJaContactados && jaContactados.size > 0) {
+      lista = lista.filter((c) => !jaContactados.has(c.telefone));
+    }
+    return lista;
   };
 
   const uploadMidias = async (): Promise<{ url: string; nome: string; tipo: string }[]> => {
@@ -331,7 +375,11 @@ function NovaCampanha() {
     } finally { setLoading(false); }
   };
 
-  const totalContatos = origem === "csv" ? contatosCSV.length : leadsSel.length;
+  const contatosFiltrados = getContatos();
+  const totalContatos = contatosFiltrados.length;
+  const totalExcluidos = excluirJaContactados
+    ? (origem === "csv" ? contatosCSV.length : leadsSel.length) - totalContatos
+    : 0;
   const totalMidias = midiasFiles.length + midiasTemplates.length;
   const mensagemPrincipal = mensagensVariacoes.length > 0 ? `${mensagensVariacoes.length} variação(ões)` : mensagem ? "1 mensagem" : "—";
   const instSelecionadasNomes = instancias.filter((i) => instanciasSelecionadas.includes(i.id)).map((i) => i.nome);
@@ -557,7 +605,39 @@ function NovaCampanha() {
       )}
 
       {step === 2 && (
-        <Card className="p-6">
+        <Card className="p-6 space-y-4">
+          {/* Filtro: excluir já contactados */}
+          <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg border">
+            <Checkbox
+              id="excluir-contactados"
+              checked={excluirJaContactados}
+              onCheckedChange={(c) => setExcluirJaContactados(!!c)}
+              className="mt-0.5"
+            />
+            <div className="flex-1 min-w-0">
+              <label htmlFor="excluir-contactados" className="text-sm font-medium cursor-pointer flex items-center gap-1.5">
+                <UserX className="w-4 h-4 text-muted-foreground" />
+                Excluir leads já contactados em campanhas anteriores
+              </label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Remove automaticamente quem já recebeu uma mensagem (enviada, entregue ou lida) em qualquer campanha.
+              </p>
+              {excluirJaContactados && (
+                <p className="text-xs mt-1.5 font-medium">
+                  {loadingFiltro ? (
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Verificando histórico…
+                    </span>
+                  ) : totalExcluidos > 0 ? (
+                    <span className="text-orange-600">{totalExcluidos} contato(s) excluído(s) por já terem recebido mensagem</span>
+                  ) : (
+                    <span className="text-green-600">Nenhum contato da lista foi contactado anteriormente</span>
+                  )}
+                </p>
+              )}
+            </div>
+          </div>
+
           <Tabs value={origem} onValueChange={(v) => setOrigem(v as "csv" | "lista")}>
             <TabsList>
               <TabsTrigger value="csv">Importar CSV</TabsTrigger>
@@ -568,10 +648,23 @@ function NovaCampanha() {
               <Input type="file" accept=".csv" onChange={(e) => e.target.files?.[0] && handleCSV(e.target.files[0])} />
               <p className="text-sm text-muted-foreground">Colunas: telefone (obrigatória), nome, empresa</p>
               {contatosCSV.length > 0 && (
-                <div className="text-sm">
-                  <p className="mb-2 font-medium">{contatosCSV.length} contatos válidos. Prévia:</p>
+                <div className="text-sm space-y-1">
+                  <p className="font-medium">
+                    {contatosCSV.length} contatos válidos
+                    {excluirJaContactados && totalExcluidos > 0 && (
+                      <span className="text-orange-600 font-normal ml-1.5">→ {totalContatos} serão disparados ({totalExcluidos} excluídos)</span>
+                    )}
+                    . Prévia:
+                  </p>
                   <ul className="space-y-1 text-muted-foreground">
-                    {contatosCSV.slice(0, 5).map((c, i) => <li key={i}>{c.telefone} — {c.nome || "—"}</li>)}
+                    {contatosCSV.slice(0, 5).map((c, i) => (
+                      <li key={i} className={excluirJaContactados && jaContactados.has(c.telefone) ? "line-through opacity-50" : ""}>
+                        {c.telefone} — {c.nome || "—"}
+                        {excluirJaContactados && jaContactados.has(c.telefone) && (
+                          <span className="ml-1.5 text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 px-1.5 py-0.5 rounded font-medium">já contactado</span>
+                        )}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}
@@ -632,18 +725,37 @@ function NovaCampanha() {
 
                   {/* Lista de leads */}
                   <div className="max-h-64 overflow-y-auto space-y-1 p-2 border rounded">
-                    {leadsDaPasta.map((l) => (
-                      <label key={l.id} className="flex items-center gap-3 p-2 hover:bg-muted rounded cursor-pointer">
-                        <Checkbox
-                          checked={leadsSelSet.has(l.telefone)}
-                          onCheckedChange={(c) => setLeadsSel(c ? [...leadsSel, l.telefone] : leadsSel.filter((x) => x !== l.telefone))}
-                        />
-                        <span className="text-sm w-32">{l.telefone}</span>
-                        <span className="text-sm text-muted-foreground flex-1">{l.nome || "Sem nome"}</span>
-                      </label>
-                    ))}
+                    {leadsDaPasta.map((l) => {
+                      const jaFoiContactado = excluirJaContactados && jaContactados.has(l.telefone);
+                      return (
+                        <label
+                          key={l.id}
+                          className={`flex items-center gap-3 p-2 rounded ${
+                            jaFoiContactado
+                              ? "opacity-50 cursor-default"
+                              : "hover:bg-muted cursor-pointer"
+                          }`}
+                        >
+                          <Checkbox
+                            checked={leadsSelSet.has(l.telefone)}
+                            disabled={jaFoiContactado}
+                            onCheckedChange={(c) => setLeadsSel(c ? [...leadsSel, l.telefone] : leadsSel.filter((x) => x !== l.telefone))}
+                          />
+                          <span className="text-sm w-32">{l.telefone}</span>
+                          <span className="text-sm text-muted-foreground flex-1">{l.nome || "Sem nome"}</span>
+                          {jaFoiContactado && (
+                            <span className="text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 px-1.5 py-0.5 rounded font-medium shrink-0">já contactado</span>
+                          )}
+                        </label>
+                      );
+                    })}
                   </div>
-                  <p className="text-sm font-medium text-primary">Selecionados: {leadsSel.length}</p>
+                  <p className="text-sm font-medium text-primary">
+                    Selecionados: {leadsSel.length}
+                    {excluirJaContactados && totalExcluidos > 0 && (
+                      <span className="text-orange-600 font-normal ml-1.5">({totalExcluidos} excluídos do disparo)</span>
+                    )}
+                  </p>
                 </div>
               )}
             </TabsContent>
@@ -720,23 +832,26 @@ function NovaCampanha() {
       </div>
 
       <LoadTemplateModal
+        key={templateModalKey}
         open={templateModal}
-        onClose={() => setTemplateModal(false)}
+        onClose={() => { setTemplateModal(false); setTemplateModalKey((k) => k + 1); }}
         onCarregar={(msgs) => {
           setMensagensVariacoes(msgs);
           setTemplateModal(false);
+          setTemplateModalKey((k) => k + 1);
           toast.success(`${msgs.length} variação(ões) carregada(s) do template!`);
         }}
       />
 
       <LoadMidiaTemplateModal
+        key={midiaTemplateModalKey}
         open={midiaTemplateModal}
-        onClose={() => setMidiaTemplateModal(false)}
+        onClose={() => { setMidiaTemplateModal(false); setMidiaTemplateModalKey((k) => k + 1); }}
         jaAdicionadas={midiasTemplates.map((t) => t.url)}
         limite={10 - midiasFiles.length - midiasTemplates.length}
         onAdicionar={(items) => {
           adicionarMidiasTemplate(items);
-          setMidiaTemplateModal(false);
+          setMidiaTemplateModalKey((k) => k + 1);
         }}
       />
     </div>

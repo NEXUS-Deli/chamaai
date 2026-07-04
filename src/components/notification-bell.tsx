@@ -93,15 +93,11 @@ export function NotificationBell({ collapsed = false }: { collapsed?: boolean })
     }
   };
 
-  const handleContinuarAmanha = async (e: React.MouseEvent, n: Notificacao) => {
+  const handleEntendido = async (e: React.MouseEvent, n: Notificacao) => {
     e.stopPropagation();
-    if (!n.acao_dados?.campanha_id || loadingAcao) return;
+    if (loadingAcao) return;
     setLoadingAcao(n.id);
     try {
-      await (supabase as any)
-        .from("campanhas")
-        .update({ aguardando_confirmacao: false })
-        .eq("id", n.acao_dados.campanha_id);
       await (supabase as any)
         .from("notificacoes")
         .update({ acao_respondida: true, lida: true })
@@ -109,7 +105,6 @@ export function NotificationBell({ collapsed = false }: { collapsed?: boolean })
       setNotifs((prev) =>
         prev.map((x) => x.id === n.id ? { ...x, acao_respondida: true, lida: true } : x)
       );
-      toast.success(`Campanha continuará amanhã às ${n.acao_dados.horario_inicio}`);
     } catch {
       toast.error("Erro ao confirmar. Tente novamente.");
     } finally {
@@ -219,16 +214,16 @@ export function NotificationBell({ collapsed = false }: { collapsed?: boolean })
                         })}
                       </p>
 
-                      {/* Botões de ação para confirmação de horário */}
+                      {/* Botões de ação para pausas por horário */}
                       {isConfirmarHorario && (
                         <div className="flex gap-2 mt-3">
                           <button
-                            onClick={(e) => handleContinuarAmanha(e, n)}
+                            onClick={(e) => handleEntendido(e, n)}
                             disabled={isLoading}
-                            className="flex items-center gap-1.5 flex-1 justify-center text-xs font-semibold py-1.5 px-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                            className="flex items-center gap-1.5 flex-1 justify-center text-xs font-semibold py-1.5 px-2 rounded-md bg-muted text-foreground hover:bg-muted/70 disabled:opacity-50 transition-colors"
                           >
                             <CalendarClock className="w-3 h-3" />
-                            Continuar amanhã
+                            OK, entendido
                           </button>
                           <button
                             onClick={(e) => handleCancelarDisparos(e, n)}
