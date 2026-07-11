@@ -45,6 +45,8 @@ serve(async (req) => {
 
     // ── Formato nexus-360.uazapi.com ──────────────────────────────────────
     // { EventType: "messages_update", event: { MessageIDs: [...], Type: "Delivered"|"Read" }, state: "Delivered" }
+    // Nota: nexus-360 envia IsFromMe=false para TODOS os eventos (inclusive mensagens enviadas por nós).
+    // A filtragem é feita pelo lookup de mensagem_id no banco — só mensagens da campanha terão match.
     if (body?.event && typeof body.event === 'object' && !Array.isArray(body.event)) {
       const ev = body.event as Record<string, unknown>
       const msgIds: string[] = Array.isArray(ev?.MessageIDs)
@@ -90,11 +92,21 @@ serve(async (req) => {
     let processados = 0
     for (const { msgId, numStatus } of queue) {
 
-      const { data: contato } = await supabase
+      let { data: contato } = await supabase
         .from('contatos_campanha')
         .select('id, campanha_id, status')
         .eq('mensagem_id', msgId)
         .maybeSingle()
+
+      // Fallback: registros antigos salvos no formato "PHONE:HEX" pelo nexus-360
+      if (!contato) {
+        const { data: fallback } = await supabase
+          .from('contatos_campanha')
+          .select('id, campanha_id, status')
+          .like('mensagem_id', `%:${msgId}`)
+          .maybeSingle()
+        contato = fallback ?? null
+      }
 
       if (!contato) {
         console.log(`[disparo-webhook] contato não encontrado para msgId=${msgId}`)

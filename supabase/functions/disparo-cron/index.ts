@@ -45,19 +45,31 @@ function escolherAleatorio<T>(arr: T[]): T | null {
 async function verificarWhatsApp(
   telefone: string,
   token: string,
-): Promise<{ isInWhatsapp: boolean; jid?: string }> {
+): Promise<{ isInWhatsapp: boolean; jid?: string; erroApi?: boolean }> {
   try {
     const res = await fetch(`${UAZAPI_BASE_URL}/chat/check`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', token },
       body: JSON.stringify({ numbers: [telefone] }),
     })
-    if (!res.ok) return { isInWhatsapp: false }
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '')
+      console.error(`[verificarWhatsApp] HTTP ${res.status} tel=${telefone}: ${errBody.slice(0, 300)}`)
+      return { isInWhatsapp: false, erroApi: true }
+    }
     const data = await res.json() as Array<{ query: string; isInWhatsapp: boolean; jid: string }>
+    console.log(`[verificarWhatsApp] tel=${telefone} →`, JSON.stringify(data[0]))
     return data[0] ?? { isInWhatsapp: false }
-  } catch {
-    return { isInWhatsapp: false }
+  } catch (e) {
+    console.error(`[verificarWhatsApp] exception tel=${telefone}:`, String(e))
+    return { isInWhatsapp: false, erroApi: true }
   }
+}
+
+// nexus-360 retorna IDs no formato "PHONE:HEX" — normaliza para só o HEX
+function normalizarMsgId(rawId: string | null | undefined): string | null {
+  if (!rawId) return null
+  return rawId.includes(':') ? (rawId.split(':').pop() ?? rawId) : rawId
 }
 
 // Returns messageId on success, null on failure
@@ -70,7 +82,7 @@ async function enviarTexto(jid: string, texto: string, token: string): Promise<s
     })
     if (!res.ok) return null
     const data = await res.json()
-    return data?.key?.id ?? data?.id ?? null
+    return normalizarMsgId(data?.key?.id ?? data?.id)
   } catch { return null }
 }
 
@@ -99,7 +111,7 @@ async function enviarMidia(
     })
     if (!res.ok) return null
     const data = await res.json()
-    return data?.key?.id ?? data?.id ?? null
+    return normalizarMsgId(data?.key?.id ?? data?.id)
   } catch { return null }
 }
 
@@ -340,7 +352,15 @@ async function processarDisparo() {
 
         // Valida WhatsApp
         const telefone = formatarTelefone(contato.telefone)
+        console.log(`[disparo-cron] verificando tel=${telefone} (original=${contato.telefone})`)
         const verificacao = await verificarWhatsApp(telefone, instancia.token)
+
+        if (verificacao.erroApi) {
+          // Erro de API (token inválido, instância desconectada, etc.) — não marca como inválido
+          console.error(`[disparo-cron] erro de API ao verificar ${telefone} — parando campanha ${campanha.id}`)
+          await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
+          break
+        }
 
         if (!verificacao.isInWhatsapp) {
           await supabase
@@ -426,9 +446,10 @@ async function processarDisparo() {
       }
 
       // Atualiza contadores da campanha
+      // "enviadas" conta enviado + entregue + lido (mensagens que saíram com sucesso, independente do status atual)
       const [{ count: enviadas }, { count: erroCount }, { count: invalidos }] = await Promise.all([
         supabase.from('contatos_campanha').select('id', { count: 'exact', head: true })
-          .eq('campanha_id', campanha.id).eq('status', 'enviado'),
+          .eq('campanha_id', campanha.id).in('status', ['enviado', 'entregue', 'lido']),
         supabase.from('contatos_campanha').select('id', { count: 'exact', head: true })
           .eq('campanha_id', campanha.id).eq('status', 'erro'),
         supabase.from('contatos_campanha').select('id', { count: 'exact', head: true })

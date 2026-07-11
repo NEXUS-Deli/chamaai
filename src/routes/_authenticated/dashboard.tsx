@@ -32,6 +32,7 @@ interface CampanhaItem {
   total_contatos: number | null;
   enviadas: number | null;
   entregues: number | null;
+  lidos: number | null;
   erros: number | null;
   criada_em: string;
 }
@@ -128,6 +129,7 @@ function Dashboard() {
         { data: campanhasGrafico },
         { data: storiesRaw },
         { data: planRaw },
+        { count: storiesCount },
       ] = await Promise.all([
         // Instâncias: busca token para verificar status em tempo real
         supabase.from("instancias").select("id,token").eq("usuario_id", uid),
@@ -139,7 +141,7 @@ function Dashboard() {
           .gte("importado_em", start)
           .lte("importado_em", end),
 
-        // Campanhas do período (top 5 recentes)
+        // Campanhas do período (top 5 recentes para a lista)
         supabase.from("campanhas")
           .select("id,nome,status,total_contatos,enviadas,entregues,erros,criada_em")
           .eq("usuario_id", uid)
@@ -148,14 +150,14 @@ function Dashboard() {
           .order("criada_em", { ascending: false })
           .limit(5),
 
-        // Todas campanhas do período para o gráfico
+        // Todas campanhas do período para o gráfico e métricas
         supabase.from("campanhas")
-          .select("enviadas,erros,criada_em")
+          .select("enviadas,entregues,lidos,erros,criada_em")
           .eq("usuario_id", uid)
           .gte("criada_em", start)
           .lte("criada_em", end),
 
-        // Stories pendentes (próximos, sem filtro de período)
+        // Stories pendentes (próximos, sem filtro de período) — lista para exibição
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any).from("stories_agendamentos")
           .select("id,titulo,tipo,status,agendado_para")
@@ -163,6 +165,13 @@ function Dashboard() {
           .eq("status", "pendente")
           .order("agendado_para", { ascending: true })
           .limit(4),
+
+        // Contagem total de stories pendentes (sem limite)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("stories_agendamentos")
+          .select("*", { count: "exact", head: true })
+          .eq("usuario_id", uid)
+          .eq("status", "pendente"),
 
         // Plano ativo do usuário para exibir o limite de conexões
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -180,6 +189,7 @@ function Dashboard() {
 
       const totalEnviadas  = campGrafico.reduce((a, c) => a + (c.enviadas  ?? 0), 0);
       const totalEntregues = campGrafico.reduce((a, c) => a + (c.entregues ?? 0), 0);
+      const totalLidos     = campGrafico.reduce((a, c) => a + (c.lidos     ?? 0), 0);
       const totalErros     = campGrafico.reduce((a, c) => a + (c.erros     ?? 0), 0);
 
       // Verifica status real das instâncias via UAZAPI (igual à página Conexões)
@@ -216,12 +226,15 @@ function Dashboard() {
         instConectadas,
         planLimit,
         totalLeads: leadsCount ?? 0,
-        totalCamps: campList.length,
+        totalCamps: campGrafico.length,
         totalEnviadas,
         totalEntregues,
         totalErros,
-        taxaEntrega: totalEnviadas > 0 ? Math.round((totalEntregues / totalEnviadas) * 100) : null,
+        taxaEntrega: totalEnviadas > 0 ? Math.min(100, Math.round((totalEntregues / totalEnviadas) * 100)) : null,
+        totalLidos,
+        taxaLeitura: totalEntregues > 0 ? Math.min(100, Math.round((totalLidos / totalEntregues) * 100)) : null,
         recentesCamps: campList,
+        totalStories: storiesCount ?? storyList.length,
         proximosStories: storyList,
         chartData: buildChartData(campGrafico, startDate, endDate),
       };
@@ -303,12 +316,12 @@ function Dashboard() {
         <>
           {/* Métricas */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-border rounded-xl overflow-hidden border">
-            <WhatsAppMetric conectadas={data!.instConectadas} limite={data!.planLimit} />
             <Metric label="Contatos importados"   value={data!.totalLeads.toLocaleString("pt-BR")}           icon={Users}          note={periodoLabel} />
             <Metric label="Campanhas"             value={data!.totalCamps}                                    icon={Send}           note={periodoLabel} />
             <Metric label="Mensagens enviadas"    value={data!.totalEnviadas.toLocaleString("pt-BR")}        icon={MessageSquare}  note={periodoLabel} />
             <Metric label="Taxa de entrega"       value={data!.taxaEntrega !== null ? `${data!.taxaEntrega}%` : "—"} icon={CheckCircle2} active={data!.taxaEntrega !== null && data!.taxaEntrega >= 70} note={`${data!.totalEntregues} entregues`} />
-            <Metric label="Stories agendados"     value={data!.proximosStories.length}                       icon={Clapperboard}   note="próximos" />
+            <Metric label="Taxa de leitura"       value={data!.taxaLeitura !== null ? `${data!.taxaLeitura}%` : "—"} icon={CheckCircle2} active={data!.taxaLeitura !== null && data!.taxaLeitura >= 30} note={`${data!.totalLidos} lidas`} />
+            <Metric label="Stories agendados"     value={data!.totalStories}                                  icon={Clapperboard}   note="próximos" />
           </div>
 
           {/* Gráfico */}

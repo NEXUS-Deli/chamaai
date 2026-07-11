@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff, AlertTriangle, Radio, ShieldCheck } from "lucide-react";
+import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff, AlertTriangle, Radio, ShieldCheck, Copy } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { canAddConnection } from "@/lib/plans";
 
@@ -588,28 +588,43 @@ function ConfigPage() {
                       Rastreamento inativo
                     </div>
                   )}
-                  {!inst.webhook_configurado && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-xs px-2 shrink-0"
-                      onClick={() => configurarWebhook(inst)}
-                      disabled={isWebhookLoading}
-                    >
-                      {isWebhookLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Ativar"}
-                    </Button>
-                  )}
-                  {inst.webhook_configurado && (
+                  <div className="flex items-center gap-1 shrink-0">
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs px-2 shrink-0 text-muted-foreground"
-                      onClick={() => configurarWebhook(inst)}
-                      disabled={isWebhookLoading}
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                      title="Copiar URL do webhook"
+                      onClick={() => {
+                        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/disparo-webhook?token=${inst.token}`;
+                        navigator.clipboard.writeText(url);
+                        toast.success("URL do webhook copiada!");
+                      }}
                     >
-                      {isWebhookLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Reconfigurar"}
+                      <Copy className="w-3 h-3" />
                     </Button>
-                  )}
+                    {!inst.webhook_configurado && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-xs px-2"
+                        onClick={() => configurarWebhook(inst)}
+                        disabled={isWebhookLoading}
+                      >
+                        {isWebhookLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Ativar"}
+                      </Button>
+                    )}
+                    {inst.webhook_configurado && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs px-2 text-muted-foreground"
+                        onClick={() => configurarWebhook(inst)}
+                        disabled={isWebhookLoading}
+                      >
+                        {isWebhookLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Reconfigurar"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
