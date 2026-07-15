@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, Send, Zap, BarChart3, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -18,6 +19,8 @@ interface Campanha {
   criada_em: string; usuario_id: string;
 }
 interface Instancia { id: string; nome: string; usuario_id: string }
+interface Plan { id: string; name: string; max_connections: number }
+interface UserPlan { user_id: string; plan_id: string }
 
 const STATUS_LABEL: Record<string, { label: string; class: string }> = {
   em_andamento: { label: "Ativo",     class: "bg-green-100 text-green-700" },
@@ -38,6 +41,9 @@ function AdminPage() {
   const [loading, setLoading]         = useState(true);
   const [filtroUser, setFiltroUser]   = useState<string>("all");
   const [filtroStatus, setFiltroStatus] = useState<string>("all");
+  const [plans, setPlans]             = useState<Plan[]>([]);
+  const [userPlans, setUserPlans]     = useState<Record<string, string>>({}); // user_id -> plan_id
+  const [changingPlanId, setChangingPlanId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -63,6 +69,8 @@ function AdminPage() {
       { data: camps },
       { data: insts },
       { count: leads },
+      { data: plansData },
+      { data: userPlansData },
     ] = await Promise.all([
       (supabase as any).from("profiles").select("id,nome,email"),
       (supabase as any)
@@ -72,13 +80,41 @@ function AdminPage() {
         .limit(200),
       (supabase as any).from("instancias").select("id,nome,usuario_id"),
       (supabase as any).from("leads").select("id", { count: "exact", head: true }),
+      (supabase as any).from("plans").select("id,name,max_connections").order("max_connections", { ascending: true }),
+      (supabase as any).from("user_plans").select("user_id,plan_id"),
     ]);
 
     setProfiles(profs ?? []);
     setCampanhas(camps ?? []);
     setInstancias(insts ?? []);
     setTotalLeads(leads ?? 0);
+    setPlans(plansData ?? []);
+    setUserPlans(
+      Object.fromEntries(((userPlansData ?? []) as UserPlan[]).map((up) => [up.user_id, up.plan_id]))
+    );
     setLoading(false);
+  };
+
+  const changePlano = async (userId: string, planId: string) => {
+    const anterior = userPlans[userId];
+    setChangingPlanId(userId);
+    setUserPlans((prev) => ({ ...prev, [userId]: planId })); // otimista
+    try {
+      const { error } = await (supabase as any)
+        .from("user_plans")
+        .upsert(
+          { user_id: userId, plan_id: planId, active: true, started_at: new Date().toISOString() },
+          { onConflict: "user_id" }
+        );
+      if (error) throw new Error(error.message);
+      const nomePlano = plans.find((pl) => pl.id === planId)?.name ?? planId;
+      toast.success(`Plano alterado para ${nomePlano}`);
+    } catch (e) {
+      setUserPlans((prev) => ({ ...prev, [userId]: anterior })); // desfaz em caso de erro
+      toast.error(e instanceof Error ? e.message : "Erro ao alterar plano");
+    } finally {
+      setChangingPlanId(null);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -195,10 +231,11 @@ function AdminPage() {
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Usuários</h2>
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[500px]">
+            <table className="w-full text-sm min-w-[650px]">
               <thead className="border-b text-left text-muted-foreground text-xs uppercase tracking-wide">
                 <tr>
                   <th className="px-4 py-3">Usuário</th>
+                  <th className="px-3 py-3">Plano</th>
                   <th className="px-3 py-3">E-mail</th>
                   <th className="px-3 py-3 text-right whitespace-nowrap">Conexões WA</th>
                   <th className="px-3 py-3 text-right">Campanhas</th>
@@ -207,12 +244,13 @@ function AdminPage() {
               </thead>
               <tbody>
                 {profiles.length === 0 && (
-                  <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">Nenhum usuário encontrado</td></tr>
+                  <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhum usuário encontrado</td></tr>
                 )}
                 {profiles.map((p) => {
                   const userCamps  = campanhas.filter((c) => c.usuario_id === p.id);
                   const userSent   = userCamps.reduce((s, c) => s + (c.enviadas ?? 0), 0);
                   const userConns  = instanciasPorUser[p.id] ?? 0;
+                  const planoAtual = userPlans[p.id] ?? "";
                   return (
                     <tr
                       key={p.id}
@@ -220,6 +258,30 @@ function AdminPage() {
                       onClick={() => setFiltroUser(filtroUser === p.id ? "all" : p.id)}
                     >
                       <td className="px-4 py-3 font-medium truncate max-w-[140px]">{p.nome || "—"}</td>
+                      <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={planoAtual}
+                          onValueChange={(v) => changePlano(p.id, v)}
+                          disabled={changingPlanId === p.id}
+                        >
+                          <SelectTrigger className="h-8 w-[130px] text-xs">
+                            {changingPlanId === p.id ? (
+                              <span className="flex items-center gap-1.5 text-muted-foreground">
+                                <Loader2 className="w-3 h-3 animate-spin" /> Salvando…
+                              </span>
+                            ) : (
+                              <SelectValue placeholder="Sem plano" />
+                            )}
+                          </SelectTrigger>
+                          <SelectContent>
+                            {plans.map((pl) => (
+                              <SelectItem key={pl.id} value={pl.id}>
+                                {pl.name} ({pl.max_connections} conexão{pl.max_connections !== 1 ? "ões" : ""})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
                       <td className="px-3 py-3 text-muted-foreground text-xs truncate max-w-[180px]">{p.email || "—"}</td>
                       <td className="px-3 py-3 text-right tabular-nums">{userConns}</td>
                       <td className="px-3 py-3 text-right tabular-nums">{userCamps.length}</td>

@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Users, LogOut, Flame, Menu, X, ChevronLeft, ChevronRight, Sun, Moon, Wrench, Clapperboard, FileText, Send, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Flame, Menu, X, ChevronLeft, ChevronRight, Sun, Moon, Wrench, Clapperboard, FileText, Send, ShieldCheck, Bot } from "lucide-react";
 import { type ReactNode, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBranding } from "@/lib/branding";
@@ -21,6 +21,7 @@ const items = [
   { to: "/stories", label: "Stories do WhatsApp", icon: Clapperboard },
   { to: "/leads", label: "Clientes/Leads", icon: Users },
   { to: "/templates", label: "Templates", icon: FileText },
+  { to: "/atendimento-ia", label: "Atendimento com IA", icon: Bot },
   { to: "/configuracoes", label: "Conexões", icon: WhatsAppIcon },
   { to: "/ferramentas/verificador", label: "Ferramentas", icon: Wrench },
 ];

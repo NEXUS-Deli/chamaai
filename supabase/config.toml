@@ -20,3 +20,13 @@ entrypoint = "./functions/disparo-cron/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/stories-cron/index.ts"
+
+[functions.ai-agent-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ai-agent-webhook/index.ts"
+
+[functions.ai-agent-buffer-sweep]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ai-agent-buffer-sweep/index.ts"
