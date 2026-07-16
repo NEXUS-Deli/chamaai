@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -138,6 +138,14 @@ interface Campanha {
   midia_tipo: string | null
   midia_nome: string | null
   aguardando_confirmacao: boolean
+  agendada_para: string | null
+  recorrente: boolean
+  recorrencia_intervalo_dias: number | null
+  recorrencia_dias_excluidos: number[]
+  pasta_ids: string[] | null
+  serie_recorrencia_id: string | null
+  instancia_whatsapp: string | null
+  instancia_nome: string | null
 }
 
 interface ContatoCampanha {
@@ -161,6 +169,129 @@ function aplicarVariaveis(mensagem: string, contato: ContatoCampanha): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
+}
+
+// "enviadas" conta enviado + entregue + lido (mensagens que saíram com sucesso, independente do status atual)
+async function recalcularContadores(supabase: SupabaseClient, campanhaId: string): Promise<{ enviadas: number; erros: number }> {
+  const [{ count: enviadas }, { count: erroCount }, { count: invalidos }] = await Promise.all([
+    supabase.from('contatos_campanha').select('id', { count: 'exact', head: true })
+      .eq('campanha_id', campanhaId).in('status', ['enviado', 'entregue', 'lido']),
+    supabase.from('contatos_campanha').select('id', { count: 'exact', head: true })
+      .eq('campanha_id', campanhaId).eq('status', 'erro'),
+    supabase.from('contatos_campanha').select('id', { count: 'exact', head: true })
+      .eq('campanha_id', campanhaId).eq('status', 'invalido'),
+  ])
+  return { enviadas: enviadas ?? 0, erros: (erroCount ?? 0) + (invalidos ?? 0) }
+}
+
+// ── Recorrência ────────────────────────────────────────────────────────────
+
+// Dia da semana em horário de Brasília (mesma conversão -3h usada em estaNoHorario)
+function diaSemanaBRT(date: Date): number {
+  return new Date(date.getTime() - 3 * 60 * 60 * 1000).getUTCDay()
+}
+
+// Soma o intervalo em dias e avança dia a dia até achar um dia da semana não excluído.
+// Retorna null se todos os dias estiverem excluídos (config inválida) ou não achar em 14 tentativas.
+function proximaDataRecorrencia(baseISO: string, intervaloDias: number, diasExcluidos: number[]): Date | null {
+  const excluidos = new Set(diasExcluidos)
+  if (excluidos.size >= 7) return null
+
+  let candidata = new Date(new Date(baseISO).getTime() + intervaloDias * 24 * 60 * 60 * 1000)
+  let tentativas = 0
+  while (excluidos.has(diaSemanaBRT(candidata)) && tentativas < 14) {
+    candidata = new Date(candidata.getTime() + 24 * 60 * 60 * 1000)
+    tentativas++
+  }
+  return excluidos.has(diaSemanaBRT(candidata)) ? null : candidata
+}
+
+// Ao concluir uma campanha recorrente, cria a próxima execução: repuxa os
+// contatos atuais das pastas de origem e clona mensagem/mídia/config.
+async function agendarProximaRecorrencia(supabase: SupabaseClient, campanha: Campanha): Promise<void> {
+  if (!campanha.recorrente || !campanha.recorrencia_intervalo_dias) return
+
+  if (!campanha.pasta_ids?.length) {
+    console.warn(`[disparo-cron] campanha ${campanha.id} recorrente sem pasta_ids — não é possível repetir`)
+    return
+  }
+
+  const base = campanha.agendada_para ?? new Date().toISOString()
+  const proxima = proximaDataRecorrencia(base, campanha.recorrencia_intervalo_dias, campanha.recorrencia_dias_excluidos ?? [])
+
+  if (!proxima) {
+    await supabase.from('notificacoes').insert({
+      usuario_id: campanha.usuario_id,
+      titulo: `Recorrência interrompida: "${campanha.nome}"`,
+      mensagem: 'Não foi possível calcular a próxima data (todos os dias da semana estão excluídos ou config inválida). Ajuste a configuração de recorrência.',
+      tipo: 'erro',
+      link: `/campanhas/${campanha.id}`,
+    })
+    return
+  }
+
+  const { data: leads } = await supabase
+    .from('leads')
+    .select('telefone, nome, empresa')
+    .in('pasta_id', campanha.pasta_ids)
+
+  const contatosUnicos = Array.from(
+    new Map(((leads ?? []) as { telefone: string; nome: string | null; empresa: string | null }[])
+      .map(l => [l.telefone, l])).values()
+  )
+
+  const { data: novaCampanha, error } = await supabase
+    .from('campanhas')
+    .insert({
+      usuario_id: campanha.usuario_id,
+      nome: campanha.nome,
+      mensagem: campanha.mensagem,
+      mensagens_variacoes: campanha.mensagens_variacoes,
+      midias_variacoes: campanha.midias_variacoes,
+      instancias_selecionadas: campanha.instancias_selecionadas,
+      instancia_whatsapp: campanha.instancia_whatsapp,
+      instancia_nome: campanha.instancia_nome,
+      instancia_token: campanha.instancia_token,
+      delay_minimo: campanha.delay_minimo,
+      delay_maximo: campanha.delay_maximo,
+      delay_mensagens: campanha.delay_mensagens,
+      horario_inicio: campanha.horario_inicio,
+      horario_fim: campanha.horario_fim,
+      midia_url: campanha.midia_url,
+      midia_nome: campanha.midia_nome,
+      midia_tipo: campanha.midia_tipo,
+      total_contatos: contatosUnicos.length,
+      status: 'agendada',
+      agendada_para: proxima.toISOString(),
+      recorrente: true,
+      recorrencia_intervalo_dias: campanha.recorrencia_intervalo_dias,
+      recorrencia_dias_excluidos: campanha.recorrencia_dias_excluidos,
+      pasta_ids: campanha.pasta_ids,
+      serie_recorrencia_id: campanha.serie_recorrencia_id ?? campanha.id,
+    })
+    .select()
+    .single()
+
+  if (error || !novaCampanha) {
+    console.error(`[disparo-cron] falha ao criar próxima execução recorrente da campanha ${campanha.id}:`, error)
+    return
+  }
+
+  if (contatosUnicos.length > 0) {
+    await supabase.from('contatos_campanha').insert(
+      contatosUnicos.map(c => ({ campanha_id: novaCampanha.id, telefone: c.telefone, nome: c.nome, empresa: c.empresa }))
+    )
+  }
+
+  await supabase.from('notificacoes').insert({
+    usuario_id: campanha.usuario_id,
+    titulo: `Próxima execução agendada: "${campanha.nome}"`,
+    mensagem: `Repetição automática agendada para ${proxima.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}, com ${contatosUnicos.length} contato(s).`,
+    tipo: 'info',
+    link: `/campanhas/${novaCampanha.id}`,
+  })
+
+  console.log(`[disparo-cron] recorrência: próxima execução da campanha "${campanha.nome}" agendada para ${proxima.toISOString()} com ${contatosUnicos.length} contato(s)`)
 }
 
 // ── Main Engine ────────────────────────────────────────────────────────────
@@ -429,7 +560,12 @@ async function processarDisparo() {
             .eq('campanha_id', campanha.id)
             .eq('status', 'pendente')
           if ((count ?? 0) === 0) {
-            await supabase.from('campanhas').update({ status: 'concluida' }).eq('id', campanha.id)
+            // Grava status E contadores reais numa única atualização — a trigger que gera
+            // a notificação de "campanha concluída" lê os valores desta mesma linha, então
+            // precisa vê-los já corretos (não zerados) no momento em que status vira concluida.
+            const contadoresFinais = await recalcularContadores(supabase, campanha.id)
+            await supabase.from('campanhas').update({ status: 'concluida', ...contadoresFinais }).eq('id', campanha.id)
+            await agendarProximaRecorrencia(supabase, campanha)
           }
           break
         }
@@ -445,19 +581,11 @@ async function processarDisparo() {
         }
       }
 
-      // Atualiza contadores da campanha
-      // "enviadas" conta enviado + entregue + lido (mensagens que saíram com sucesso, independente do status atual)
-      const [{ count: enviadas }, { count: erroCount }, { count: invalidos }] = await Promise.all([
-        supabase.from('contatos_campanha').select('id', { count: 'exact', head: true })
-          .eq('campanha_id', campanha.id).in('status', ['enviado', 'entregue', 'lido']),
-        supabase.from('contatos_campanha').select('id', { count: 'exact', head: true })
-          .eq('campanha_id', campanha.id).eq('status', 'erro'),
-        supabase.from('contatos_campanha').select('id', { count: 'exact', head: true })
-          .eq('campanha_id', campanha.id).eq('status', 'invalido'),
-      ])
+      // Atualiza contadores da campanha (cobre o caso de ainda estar em_andamento,
+      // parcialmente processada dentro do limite de 50s desta invocação)
       await supabase
         .from('campanhas')
-        .update({ enviadas: enviadas ?? 0, erros: (erroCount ?? 0) + (invalidos ?? 0) })
+        .update(await recalcularContadores(supabase, campanha.id))
         .eq('id', campanha.id)
 
       processadas++

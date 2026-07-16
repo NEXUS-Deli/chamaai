@@ -24,6 +24,16 @@ export const Route = createFileRoute("/_authenticated/campanhas/nova")({
 interface Contato { telefone: string; nome: string; empresa: string }
 interface Instancia { id: string; nome: string; instancia: string; token: string | null }
 
+const DIAS_SEMANA = [
+  { value: 0, label: "Dom" },
+  { value: 1, label: "Seg" },
+  { value: 2, label: "Ter" },
+  { value: 3, label: "Qua" },
+  { value: 4, label: "Qui" },
+  { value: 5, label: "Sex" },
+  { value: 6, label: "Sáb" },
+];
+
 function MidiaThumbUrl({ url, nome, tipo, onRemove }: { url: string; nome: string; tipo: string; onRemove: () => void }) {
   return (
     <div className="relative group w-20 h-20 rounded-md border bg-muted overflow-hidden flex-shrink-0">
@@ -106,6 +116,10 @@ function NovaCampanha() {
   const [midiaTemplateModal, setMidiaTemplateModal] = useState(false);
 
   const [agendarPara, setAgendarPara] = useState("");
+
+  const [recorrente, setRecorrente] = useState(false);
+  const [recorrenciaIntervaloDias, setRecorrenciaIntervaloDias] = useState(7);
+  const [recorrenciaDiasExcluidos, setRecorrenciaDiasExcluidos] = useState<number[]>([]);
 
   const [pastas, setPastas] = useState<{ id: string; nome: string }[]>([]);
   const [pastasSel, setPastasSel] = useState<string[]>([]);
@@ -332,7 +346,7 @@ function NovaCampanha() {
       const midiasVariacoes = await uploadMidias();
       const primeiraMidia = midiasVariacoes[0] ?? null;
 
-      const { data: camp, error } = await supabase
+      const { data: camp, error } = await (supabase as any)
         .from("campanhas")
         .insert({
           usuario_id: u.user.id,
@@ -358,6 +372,10 @@ function NovaCampanha() {
           total_contatos: contatos.length,
           status: agendarPara ? "agendada" : "em_andamento",
           agendada_para: formatarDataParaBRT(agendarPara),
+          recorrente: origem === "lista" && recorrente,
+          recorrencia_intervalo_dias: origem === "lista" && recorrente ? recorrenciaIntervaloDias : null,
+          recorrencia_dias_excluidos: origem === "lista" && recorrente ? recorrenciaDiasExcluidos : [],
+          pasta_ids: origem === "lista" && recorrente ? pastasSel : null,
         })
         .select()
         .single();
@@ -804,6 +822,68 @@ function NovaCampanha() {
                 <Label className="text-muted-foreground">Agendar para (opcional)</Label>
                 <Input type="datetime-local" value={agendarPara} onChange={(e) => setAgendarPara(e.target.value)} />
               </div>
+
+              {origem === "lista" ? (
+                <div className="space-y-3 border rounded-lg p-4 bg-muted/20">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <Checkbox checked={recorrente} onCheckedChange={(c) => setRecorrente(c === true)} />
+                    <div>
+                      <span className="text-sm font-medium">Repetir automaticamente</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Ao concluir, uma nova execução é criada automaticamente com os mesmos textos e mídias, buscando os contatos atuais das pastas selecionadas.
+                      </p>
+                    </div>
+                  </label>
+
+                  {recorrente && (
+                    <div className="pl-7 space-y-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">A cada quantos dias</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          className="w-24"
+                          value={recorrenciaIntervaloDias}
+                          onChange={(e) => setRecorrenciaIntervaloDias(Math.max(1, Number(e.target.value) || 1))}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">Não enviar em</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {DIAS_SEMANA.map((d) => {
+                            const marcado = recorrenciaDiasExcluidos.includes(d.value);
+                            const ultimoDisponivel = !marcado && recorrenciaDiasExcluidos.length === 6;
+                            return (
+                              <button
+                                key={d.value}
+                                type="button"
+                                disabled={ultimoDisponivel}
+                                onClick={() =>
+                                  setRecorrenciaDiasExcluidos((prev) =>
+                                    marcado ? prev.filter((v) => v !== d.value) : [...prev, d.value]
+                                  )
+                                }
+                                className={`w-11 h-9 rounded-md text-xs font-medium border transition-colors ${
+                                  marcado
+                                    ? "bg-destructive text-destructive-foreground border-destructive"
+                                    : "bg-background hover:bg-muted"
+                                } ${ultimoDisponivel ? "opacity-40 cursor-not-allowed" : ""}`}
+                              >
+                                {d.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Selecione ao menos um dia disponível para envio.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Repetição automática só está disponível para contatos vindos de pastas salvas (aba "Lista salva").
+                </p>
+              )}
             </div>
           </div>
         </Card>

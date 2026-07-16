@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Pause, Play, X, Loader2, FileText, ImageIcon, Video, Download, Filter } from "lucide-react";
+import { Pause, Play, X, Loader2, FileText, ImageIcon, Video, Download, Filter, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/campanhas/$id")({
@@ -163,6 +163,14 @@ function Detalhes() {
       toast.success("Campanha cancelada.");
     });
 
+  const handleCancelarRecorrencia = () =>
+    acaoComLoading(async () => {
+      if (!confirm('Cancelar a repetição automática? Esta execução continua normalmente, mas nenhuma nova execução será criada ao concluir.')) return;
+      const { error } = await (supabase as any).from("campanhas").update({ recorrente: false }).eq("id", id);
+      if (error) throw error;
+      toast.success("Repetição automática cancelada.");
+    });
+
   // Derivar contadores do array contatos (mais atualizado que camp.enviadas do DB)
   const enviadasCount = contatos.filter((c) => ["enviado", "entregue", "lido"].includes(c.status)).length;
   const entreguesCount = contatos.filter((c) => ["entregue", "lido"].includes(c.status)).length;
@@ -270,10 +278,25 @@ function Detalhes() {
                 Agendada para {new Date(camp.agendada_para).toLocaleString("pt-BR")}
               </span>
             )}
+            {camp.recorrente && (
+              <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                <RefreshCw className="w-3 h-3" />
+                Repete a cada {camp.recorrencia_intervalo_dias} dia{camp.recorrencia_intervalo_dias !== 1 ? "s" : ""}
+                {(camp.recorrencia_dias_excluidos?.length ?? 0) > 0 &&
+                  ` (exceto ${camp.recorrencia_dias_excluidos
+                    .map((d: number) => ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"][d])
+                    .join(", ")})`}
+              </span>
+            )}
           </div>
         </div>
 
         <div className="flex gap-2">
+          {camp.recorrente && ["aguardando", "agendada", "em_andamento", "pausada"].includes(camp.status) && (
+            <Button variant="outline" onClick={handleCancelarRecorrencia} disabled={loadingAcao}>
+              <RefreshCw className="w-4 h-4 mr-2" />Cancelar recorrência
+            </Button>
+          )}
           {["aguardando", "agendada"].includes(camp.status) && (
             <Button onClick={handleIniciar} disabled={loadingAcao}>
               {loadingAcao ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
