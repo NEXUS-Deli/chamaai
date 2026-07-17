@@ -167,10 +167,6 @@ function aplicarVariaveis(mensagem: string, contato: ContatoCampanha): string {
     .replace(/\{telefone\}/g, contato.telefone)
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(r => setTimeout(r, ms))
-}
-
 // "enviadas" conta enviado + entregue + lido (mensagens que saíram com sucesso, independente do status atual)
 async function recalcularContadores(supabase: SupabaseClient, campanhaId: string): Promise<{ enviadas: number; erros: number }> {
   const [{ count: enviadas }, { count: erroCount }, { count: invalidos }] = await Promise.all([
@@ -300,6 +296,16 @@ async function processarDisparo() {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
   const erros: string[] = []
   let processadas = 0
+
+  // Recupera contatos travados em 'enviando' (a invocação que reivindicou o envio
+  // falhou/crashou no meio do caminho) há mais de 2 minutos — sem isso, a campanha
+  // ficaria esperando por esse contato pra sempre, já que ele não é mais 'pendente'.
+  const doisMinutosAtras = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+  await supabase
+    .from('contatos_campanha')
+    .update({ status: 'pendente', next_send_at: new Date().toISOString() })
+    .eq('status', 'enviando')
+    .lt('atualizado_em', doisMinutosAtras)
 
   // Ativa campanhas agendadas cujo horário chegou
   const agora = new Date().toISOString()
@@ -451,138 +457,141 @@ async function processarDisparo() {
         }
       }
 
-      // Processa contatos elegíveis por até 50 segundos desta invocação
-      const limite = Date.now() + 50_000
+      // Processa NO MÁXIMO um contato "vencido" por invocação — sem sleep.
+      // O próprio pg_cron roda a cada 5s (ver migration da recorrência) e cuida do
+      // ritmo entre envios: assim o delay_minimo/delay_maximo sorteado é sempre a
+      // única coisa que determina o espaçamento real, sem depender de a invocação
+      // ter "orçamento" sobrando pra dormir até lá.
+      const { data: contatos } = await supabase
+        .from('contatos_campanha')
+        .select('*')
+        .eq('campanha_id', campanha.id)
+        .eq('status', 'pendente')
+        .not('next_send_at', 'is', null)
+        .lte('next_send_at', new Date().toISOString())
+        .order('next_send_at', { ascending: true })
+        .limit(1)
 
-      while (Date.now() < limite) {
-        const { data: contatos } = await supabase
+      const contato = contatos?.[0] as ContatoCampanha | undefined
+
+      if (contato) {
+        // Reivindicação atômica (CAS): só segue se ESTA invocação conseguir marcar o
+        // contato como 'enviando' partindo de 'pendente'. Se outra invocação (tick
+        // seguinte do cron, caso esta demore mais que 5s) já pegou, desiste em silêncio.
+        const { data: reivindicado } = await supabase
           .from('contatos_campanha')
-          .select('*')
-          .eq('campanha_id', campanha.id)
+          .update({ status: 'enviando' })
+          .eq('id', contato.id)
           .eq('status', 'pendente')
-          .not('next_send_at', 'is', null)
-          .lte('next_send_at', new Date().toISOString())
-          .order('next_send_at', { ascending: true })
-          .limit(1)
-
-        const contato = contatos?.[0] as ContatoCampanha | undefined
-        if (!contato) break
-
-        // Seleciona instância aleatória
-        const instancias = campanha.instancias_selecionadas
-        const instancia = instancias.length > 0
-          ? escolherAleatorio(instancias)
-          : campanha.instancia_token
-          ? { id: '', nome: '', token: campanha.instancia_token }
-          : null
-
-        if (!instancia) {
-          await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
-          break
-        }
-
-        // Valida WhatsApp
-        const telefone = formatarTelefone(contato.telefone)
-        console.log(`[disparo-cron] verificando tel=${telefone} (original=${contato.telefone})`)
-        const verificacao = await verificarWhatsApp(telefone, instancia.token)
-
-        if (verificacao.erroApi) {
-          // Erro de API (token inválido, instância desconectada, etc.) — não marca como inválido
-          console.error(`[disparo-cron] erro de API ao verificar ${telefone} — parando campanha ${campanha.id}`)
-          await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
-          break
-        }
-
-        if (!verificacao.isInWhatsapp) {
-          await supabase
-            .from('contatos_campanha')
-            .update({ status: 'invalido', wpp_valido: false })
-            .eq('id', contato.id)
-        } else {
-          const jid = verificacao.jid ?? `${telefone}@s.whatsapp.net`
-
-          // Seleciona mensagem aleatória
-          const variacoes = campanha.mensagens_variacoes
-          const mensagemBase = variacoes.length > 0
-            ? (escolherAleatorio(variacoes) ?? campanha.mensagem)
-            : campanha.mensagem
-          const mensagemFinal = aplicarVariaveis(mensagemBase, contato)
-
-          // Seleciona mídia aleatória (midias_variacoes tem prioridade; fallback para midia_url legado)
-          const todasMidias: MidiaVariacao[] = campanha.midias_variacoes?.length > 0
-            ? campanha.midias_variacoes
-            : (campanha.midia_url && campanha.midia_tipo)
-            ? [{ url: campanha.midia_url, tipo: campanha.midia_tipo, nome: campanha.midia_nome ?? 'arquivo' }]
-            : []
-          const midia = todasMidias.length > 0 ? escolherAleatorio(todasMidias) : null
-
-          // Envia mídia (com legenda) ou apenas texto
-          let mensagemId: string | null = null
-          if (midia) {
-            mensagemId = await enviarMidia(jid, midia.url, midia.tipo, midia.nome, mensagemFinal, instancia.token)
-            if (!mensagemId) {
-              // Mídia falhou — envia só texto como fallback
-              mensagemId = await enviarTexto(jid, mensagemFinal, instancia.token)
-            }
-            // Mídia enviada com sucesso: legenda já está embutida, não envia texto separado
-          } else {
-            mensagemId = await enviarTexto(jid, mensagemFinal, instancia.token)
-          }
-
-          await supabase
-            .from('contatos_campanha')
-            .update({
-              status: 'enviado',
-              mensagem_id: mensagemId,
-              instancia_usada: instancia.nome || instancia.token.slice(0, 8),
-              mensagem_enviada: mensagemFinal,
-              wpp_valido: true,
-            })
-            .eq('id', contato.id)
-        }
-
-        // Agenda o próximo contato com delay aleatório
-        const { data: proximo } = await supabase
-          .from('contatos_campanha')
           .select('id')
-          .eq('campanha_id', campanha.id)
-          .eq('status', 'pendente')
-          .neq('id', contato.id)
-          .is('next_send_at', null)
-          .order('id', { ascending: true })
-          .limit(1)
           .maybeSingle()
 
-        if (!proximo) {
-          const { count } = await supabase
+        if (reivindicado) {
+          // Seleciona instância aleatória
+          const instancias = campanha.instancias_selecionadas
+          const instancia = instancias.length > 0
+            ? escolherAleatorio(instancias)
+            : campanha.instancia_token
+            ? { id: '', nome: '', token: campanha.instancia_token }
+            : null
+
+          if (!instancia) {
+            await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
+          } else {
+            // Valida WhatsApp
+            const telefone = formatarTelefone(contato.telefone)
+            console.log(`[disparo-cron] verificando tel=${telefone} (original=${contato.telefone})`)
+            const verificacao = await verificarWhatsApp(telefone, instancia.token)
+
+            if (verificacao.erroApi) {
+              // Erro de API (token inválido, instância desconectada, etc.) — não marca como inválido
+              console.error(`[disparo-cron] erro de API ao verificar ${telefone} — campanha ${campanha.id}`)
+              await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
+            } else if (!verificacao.isInWhatsapp) {
+              await supabase
+                .from('contatos_campanha')
+                .update({ status: 'invalido', wpp_valido: false })
+                .eq('id', contato.id)
+            } else {
+              const jid = verificacao.jid ?? `${telefone}@s.whatsapp.net`
+
+              // Seleciona mensagem aleatória
+              const variacoes = campanha.mensagens_variacoes
+              const mensagemBase = variacoes.length > 0
+                ? (escolherAleatorio(variacoes) ?? campanha.mensagem)
+                : campanha.mensagem
+              const mensagemFinal = aplicarVariaveis(mensagemBase, contato)
+
+              // Seleciona mídia aleatória (midias_variacoes tem prioridade; fallback para midia_url legado)
+              const todasMidias: MidiaVariacao[] = campanha.midias_variacoes?.length > 0
+                ? campanha.midias_variacoes
+                : (campanha.midia_url && campanha.midia_tipo)
+                ? [{ url: campanha.midia_url, tipo: campanha.midia_tipo, nome: campanha.midia_nome ?? 'arquivo' }]
+                : []
+              const midia = todasMidias.length > 0 ? escolherAleatorio(todasMidias) : null
+
+              // Envia mídia (com legenda) ou apenas texto
+              let mensagemId: string | null = null
+              if (midia) {
+                mensagemId = await enviarMidia(jid, midia.url, midia.tipo, midia.nome, mensagemFinal, instancia.token)
+                if (!mensagemId) {
+                  // Mídia falhou — envia só texto como fallback
+                  mensagemId = await enviarTexto(jid, mensagemFinal, instancia.token)
+                }
+                // Mídia enviada com sucesso: legenda já está embutida, não envia texto separado
+              } else {
+                mensagemId = await enviarTexto(jid, mensagemFinal, instancia.token)
+              }
+
+              await supabase
+                .from('contatos_campanha')
+                .update({
+                  status: 'enviado',
+                  mensagem_id: mensagemId,
+                  instancia_usada: instancia.nome || instancia.token.slice(0, 8),
+                  mensagem_enviada: mensagemFinal,
+                  wpp_valido: true,
+                })
+                .eq('id', contato.id)
+            }
+          }
+
+          // Agenda o próximo contato ainda não agendado com um novo delay aleatório
+          const { data: proximo } = await supabase
             .from('contatos_campanha')
-            .select('id', { count: 'exact', head: true })
+            .select('id')
             .eq('campanha_id', campanha.id)
             .eq('status', 'pendente')
-          if ((count ?? 0) === 0) {
-            // Grava status E contadores reais numa única atualização — a trigger que gera
-            // a notificação de "campanha concluída" lê os valores desta mesma linha, então
-            // precisa vê-los já corretos (não zerados) no momento em que status vira concluida.
-            const contadoresFinais = await recalcularContadores(supabase, campanha.id)
-            await supabase.from('campanhas').update({ status: 'concluida', ...contadoresFinais }).eq('id', campanha.id)
-            await agendarProximaRecorrencia(supabase, campanha)
+            .neq('id', contato.id)
+            .is('next_send_at', null)
+            .order('id', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+
+          if (proximo) {
+            const delaySeg = randomEntre(campanha.delay_minimo ?? 5, campanha.delay_maximo ?? 15)
+            const nextSendAt = new Date(Date.now() + delaySeg * 1000).toISOString()
+            await supabase.from('contatos_campanha').update({ next_send_at: nextSendAt }).eq('id', proximo.id)
+          } else {
+            const { count } = await supabase
+              .from('contatos_campanha')
+              .select('id', { count: 'exact', head: true })
+              .eq('campanha_id', campanha.id)
+              .eq('status', 'pendente')
+            if ((count ?? 0) === 0) {
+              // Grava status E contadores reais numa única atualização — a trigger que gera
+              // a notificação de "campanha concluída" lê os valores desta mesma linha, então
+              // precisa vê-los já corretos (não zerados) no momento em que status vira concluida.
+              const contadoresFinais = await recalcularContadores(supabase, campanha.id)
+              await supabase.from('campanhas').update({ status: 'concluida', ...contadoresFinais }).eq('id', campanha.id)
+              await agendarProximaRecorrencia(supabase, campanha)
+            }
           }
-          break
-        }
-
-        const delaySeg = randomEntre(campanha.delay_minimo ?? 5, campanha.delay_maximo ?? 15)
-        const nextSendAt = new Date(Date.now() + delaySeg * 1000).toISOString()
-        await supabase.from('contatos_campanha').update({ next_send_at: nextSendAt }).eq('id', proximo.id)
-
-        const espera = new Date(nextSendAt).getTime() - Date.now()
-        if (espera > 0) {
-          if (Date.now() + espera > limite) break
-          await sleep(espera)
         }
       }
 
-      // Atualiza contadores da campanha (cobre o caso de ainda estar em_andamento,
-      // parcialmente processada dentro do limite de 50s desta invocação)
+      // Atualiza contadores da campanha (métricas ao vivo, sempre leve — no máximo
+      // um contato muda de status por invocação agora)
       await supabase
         .from('campanhas')
         .update(await recalcularContadores(supabase, campanha.id))
