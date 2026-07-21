@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,12 @@ function Verificador() {
   // Exclusão real dos leads "sem WhatsApp" carregados de pasta
   const [selecionadosExcluir, setSelecionadosExcluir] = useState<Set<string>>(new Set());
   const [excluindo, setExcluindo] = useState(false);
+
+  // Busca do nome real de cada contato (chat/details, um número por vez)
+  const [buscarNomes, setBuscarNomes] = useState(true);
+  const [buscandoNomes, setBuscandoNomes] = useState(false);
+  const [progressoNomes, setProgressoNomes] = useState({ feito: 0, total: 0 });
+  const pararBuscaRef = useRef(false);
 
   // Modal de pasta
   const [modalAberto, setModalAberto] = useState(false);
@@ -182,11 +188,53 @@ function Verificador() {
 
       const validos = arr.filter((r) => r.isInWhatsapp).length;
       toast.success(`${arr.length} verificado(s) — ${validos} com WhatsApp`);
+
+      if (buscarNomes) {
+        void buscarNomesDosContatos(arr, inst.token);
+      }
     } catch (e) {
       toast.error("Erro: " + String(e instanceof Error ? e.message : e));
     } finally {
       setLoading(false);
     }
+  };
+
+  // Busca o nome real de cada contato válido, um de cada vez (chat/details não
+  // tem versão em lote). Deliberadamente sequencial e espaçado — evita parecer
+  // uma varredura automatizada em massa no número conectado.
+  const buscarNomesDosContatos = async (lista: CheckResult[], token: string) => {
+    const alvos = lista.filter((r) => r.isInWhatsapp && !r.groupName && !r.error);
+    if (!alvos.length) return;
+
+    pararBuscaRef.current = false;
+    setBuscandoNomes(true);
+    setProgressoNomes({ feito: 0, total: alvos.length });
+
+    for (let i = 0; i < alvos.length; i++) {
+      if (pararBuscaRef.current) break;
+      const alvo = alvos[i];
+      try {
+        const { data } = await supabase.functions.invoke("uazapi-proxy", {
+          body: { action: "get_chat_details", payload: { token, number: alvo.query } },
+        });
+        const nome: string | undefined = data?.name || data?.wa_name || undefined;
+        if (nome) {
+          setResultados((prev) => prev.map((r) => (r.query === alvo.query ? { ...r, verifiedName: nome } : r)));
+        }
+      } catch {
+        // falha pontual num contato não interrompe o restante da busca
+      }
+      setProgressoNomes({ feito: i + 1, total: alvos.length });
+      if (!pararBuscaRef.current && i < alvos.length - 1) {
+        await new Promise((r) => setTimeout(r, 300 + Math.random() * 300));
+      }
+    }
+
+    setBuscandoNomes(false);
+  };
+
+  const pararBuscaDeNomes = () => {
+    pararBuscaRef.current = true;
   };
 
   const excluirSemWhatsAppDaPasta = async () => {
@@ -383,6 +431,16 @@ function Verificador() {
           )}
         </div>
 
+        <label className="flex items-start gap-2 cursor-pointer">
+          <Checkbox checked={buscarNomes} onCheckedChange={(c) => setBuscarNomes(c === true)} className="mt-0.5" />
+          <span className="text-sm">
+            Também buscar o nome de cada contato
+            <span className="block text-xs text-muted-foreground font-normal">
+              Faz uma busca extra por contato (não tem como fazer em lote). Em listas grandes (centenas/milhares), pode levar vários minutos — mantenha esta aba aberta.
+            </span>
+          </span>
+        </label>
+
         <Button
           onClick={verificar}
           disabled={loading || !instanciaId || carregandoLeads || (origem === "colar" ? !numeros.trim() : leadsDaPasta.length === 0)}
@@ -391,6 +449,24 @@ function Verificador() {
             ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Verificando…</>
             : <><PhoneCall className="w-4 h-4 mr-2" />Verificar números</>}
         </Button>
+
+        {buscandoNomes && (
+          <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+            <div className="flex items-center justify-between text-sm">
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Buscando nomes: {progressoNomes.feito} / {progressoNomes.total}
+              </span>
+              <Button variant="outline" size="sm" onClick={pararBuscaDeNomes}>Parar</Button>
+            </div>
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${progressoNomes.total ? (progressoNomes.feito / progressoNomes.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        )}
       </Card>
 
       {resultados.length > 0 && (

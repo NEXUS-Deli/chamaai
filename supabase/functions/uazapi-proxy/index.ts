@@ -332,6 +332,40 @@ serve(async (req) => {
       })
     }
 
+    // --- GET CHAT DETAILS (busca nome real do contato — usado pra enriquecer o Verificador) ---
+    if (action === 'get_chat_details') {
+      const { token, number } = payload
+      if (!token) throw new Error('Token da instância é obrigatório')
+      if (!number) throw new Error('Número é obrigatório')
+
+      const response = await fetch(`${UAZAPI_BASE_URL}/chat/details`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'token': token,
+        },
+        body: JSON.stringify({ number, preview: true }),
+      })
+
+      const rawText = await response.text()
+      let data: unknown
+      try { data = JSON.parse(rawText) } catch { data = { error: rawText } }
+
+      if (!response.ok) {
+        const errMsg = (data as Record<string, string>)?.error
+          || (data as Record<string, string>)?.message
+          || `Erro ${response.status} da API Uazapi`
+        console.error('[uazapi-proxy] get_chat_details error:', response.status, rawText)
+        throw new Error(errMsg)
+      }
+
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
     // --- GET CONTACTS (lista contatos da instância, com paginação automática) ---
     if (action === 'get_contacts') {
       const { token, contactScope } = payload
