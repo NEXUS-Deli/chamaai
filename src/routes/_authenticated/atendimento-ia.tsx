@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -148,6 +148,23 @@ function formatResponseTime(secs: number | null): string {
 
 function AtendimentoIAPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+
+  // Feature em desenvolvimento — acesso restrito a admins, mesmo por URL direta
+  // (o item de menu já só aparece para admin em app-shell.tsx, isso é a segunda trava).
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: u }) => {
+      if (!u.user) { setIsAdmin(false); return; }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any)
+        .from("admins")
+        .select("user_id")
+        .eq("user_id", u.user.id)
+        .maybeSingle();
+      setIsAdmin(!!data);
+    });
+  }, []);
 
   const [periodo, setPeriodo]         = useState<Periodo>("30d");
   const [customInicio, setCustomInicio] = useState(toDateStr(new Date(Date.now() - 30 * 86400000)));
@@ -431,6 +448,24 @@ function AtendimentoIAPage() {
   const currentModels = MODELS_BY_PROVIDER[aiConfig.provedor] ?? MODELS_BY_PROVIDER.openai;
 
   // ── Render ─────────────────────────────────────────────────────────────────
+  if (isAdmin === null) {
+    return (
+      <div className="flex items-center justify-center h-full py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (isAdmin === false) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 py-20">
+        <p className="text-lg font-semibold">Acesso restrito</p>
+        <p className="text-sm text-muted-foreground">Esta área ainda está em desenvolvimento e não está disponível.</p>
+        <Button onClick={() => navigate({ to: "/dashboard" })}>Voltar ao Dashboard</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
 

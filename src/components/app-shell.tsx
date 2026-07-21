@@ -21,10 +21,12 @@ const items = [
   { to: "/stories", label: "Stories do WhatsApp", icon: Clapperboard },
   { to: "/leads", label: "Clientes/Leads", icon: Users },
   { to: "/templates", label: "Templates", icon: FileText },
-  { to: "/atendimento-ia", label: "Atendimento com IA", icon: Bot },
   { to: "/configuracoes", label: "Conexões", icon: WhatsAppIcon },
   { to: "/ferramentas/verificador", label: "Ferramentas", icon: Wrench },
 ];
+
+// Atendimento com IA ainda está em desenvolvimento — visível só para admins
+// (ver também o gate de acesso direto por URL em atendimento-ia.tsx)
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -98,9 +100,26 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {isAdmin && (
         <Link
+          to="/atendimento-ia"
+          title={collapsed ? "Atendimento com IA" : undefined}
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 mt-2 border-t border-sidebar-border pt-3 ${
+            collapsed ? "justify-center px-2" : ""
+          } ${
+            pathname === "/atendimento-ia" || pathname.startsWith("/atendimento-ia/")
+              ? "bg-primary text-primary-foreground"
+              : "text-sidebar-foreground hover:bg-sidebar-accent"
+          }`}
+        >
+          <Bot className="w-4 h-4 shrink-0" />
+          {!collapsed && <span className="truncate">Atendimento com IA</span>}
+        </Link>
+      )}
+
+      {isAdmin && (
+        <Link
           to="/admin"
           title={collapsed ? "Admin" : undefined}
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 mt-2 border-t border-sidebar-border pt-3 ${
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
             collapsed ? "justify-center px-2" : ""
           } ${
             pathname === "/admin"
