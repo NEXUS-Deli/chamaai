@@ -7,7 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { CheckCircle2, XCircle, Loader2, PhoneCall, Download, BookmarkPlus, AlertCircle, Users, FolderPlus, Folder } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CheckCircle2, XCircle, Loader2, PhoneCall, Download, BookmarkPlus, AlertCircle, Users, FolderPlus, Folder, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { FerramentasNav } from "@/components/ferramentas-nav";
 import { downloadCSV } from "@/lib/csv";
@@ -27,9 +29,13 @@ interface CheckResult {
   verifiedName?: string;
   groupName?: string;
   error?: string;
+  leadId?: string;
 }
 
+interface LeadDaPasta { id: string; telefone: string; nome: string | null }
+
 type Filtro = "todos" | "com" | "sem";
+type Origem = "colar" | "pasta";
 
 function normalizarNumero(raw: string): string {
   const d = raw.replace(/\D/g, "");
@@ -46,6 +52,16 @@ function Verificador() {
   const [loading, setLoading] = useState(false);
   const [resultados, setResultados] = useState<CheckResult[]>([]);
   const [filtro, setFiltro] = useState<Filtro>("todos");
+
+  // Origem dos números: colar manualmente ou selecionar pasta(s) de leads existentes
+  const [origem, setOrigem] = useState<Origem>("colar");
+  const [pastasOrigemSel, setPastasOrigemSel] = useState<string[]>([]);
+  const [leadsDaPasta, setLeadsDaPasta] = useState<LeadDaPasta[]>([]);
+  const [carregandoLeads, setCarregandoLeads] = useState(false);
+
+  // Exclusão real dos leads "sem WhatsApp" carregados de pasta
+  const [selecionadosExcluir, setSelecionadosExcluir] = useState<Set<string>>(new Set());
+  const [excluindo, setExcluindo] = useState(false);
 
   // Modal de pasta
   const [modalAberto, setModalAberto] = useState(false);
@@ -69,35 +85,130 @@ function Verificador() {
     })();
   }, []);
 
+  // Busca os leads das pastas selecionadas como origem, paginado em lotes de 1000
+  // (mesmo padrão de leads.tsx / campanhas.nova.tsx)
+  useEffect(() => {
+    if (origem !== "pasta" || pastasOrigemSel.length === 0) {
+      setLeadsDaPasta([]);
+      return;
+    }
+    let cancelado = false;
+    (async () => {
+      setCarregandoLeads(true);
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        if (!u.user) return;
+        const BATCH = 1000;
+        let from = 0;
+        const todos: LeadDaPasta[] = [];
+        for (;;) {
+          const { data, error } = await supabase
+            .from("leads")
+            .select("id, telefone, nome")
+            .eq("usuario_id", u.user.id)
+            .in("pasta_id", pastasOrigemSel)
+            .range(from, from + BATCH - 1);
+          if (error) throw new Error(error.message);
+          todos.push(...((data ?? []) as LeadDaPasta[]));
+          if (!data || data.length < BATCH) break;
+          from += BATCH;
+        }
+        if (!cancelado) setLeadsDaPasta(todos);
+      } catch (e) {
+        if (!cancelado) toast.error("Erro ao carregar leads da pasta: " + String(e instanceof Error ? e.message : e));
+      } finally {
+        if (!cancelado) setCarregandoLeads(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [origem, pastasOrigemSel]);
+
+  const trocarOrigem = (novaOrigem: Origem) => {
+    setOrigem(novaOrigem);
+    setResultados([]);
+    setFiltro("todos");
+    setSelecionadosExcluir(new Set());
+  };
+
+  const togglePastaOrigem = (id: string) => {
+    setPastasOrigemSel((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
   const verificar = async () => {
     const inst = instancias.find((i) => i.id === instanciaId);
     if (!inst) return toast.error("Selecione uma instância conectada");
 
-    const linhas = numeros
-      .split(/[\n,;]+/)
-      .map(normalizarNumero)
-      .filter(Boolean);
+    // Mapa numeroNormalizado -> leadId, usado só no modo "pasta" pra depois saber
+    // exatamente qual lead cada resultado representa (garante exclusão precisa).
+    const mapaLeadPorNumero = new Map<string, string>();
+    let linhas: string[];
 
-    if (!linhas.length) return toast.error("Digite ao menos um número válido (mínimo 8 dígitos)");
+    if (origem === "pasta") {
+      if (!leadsDaPasta.length) return toast.error("Nenhum lead carregado nas pastas selecionadas");
+      for (const l of leadsDaPasta) {
+        const n = normalizarNumero(l.telefone);
+        if (n) mapaLeadPorNumero.set(n, l.id);
+      }
+      linhas = [...mapaLeadPorNumero.keys()];
+    } else {
+      linhas = numeros.split(/[\n,;]+/).map(normalizarNumero).filter(Boolean);
+    }
+
+    if (!linhas.length) return toast.error("Nenhum número válido para verificar (mínimo 8 dígitos)");
 
     setLoading(true);
     setResultados([]);
     setFiltro("todos");
+    setSelecionadosExcluir(new Set());
     try {
       const { data, error } = await supabase.functions.invoke("uazapi-proxy", {
         body: { action: "check_numbers", payload: { token: inst.token, numbers: linhas } },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-      const arr: CheckResult[] = Array.isArray(data) ? data : data ? [data] : [];
-      if (!arr.length) throw new Error("A API retornou uma resposta vazia");
+      const arrBruto: CheckResult[] = Array.isArray(data) ? data : data ? [data] : [];
+      if (!arrBruto.length) throw new Error("A API retornou uma resposta vazia");
+
+      const arr = origem === "pasta"
+        ? arrBruto.map((r) => ({ ...r, leadId: mapaLeadPorNumero.get(r.query) }))
+        : arrBruto;
+
       setResultados(arr);
+
+      // Pré-seleciona pra exclusão todos os "sem WhatsApp" que vieram de um lead real
+      if (origem === "pasta") {
+        setSelecionadosExcluir(new Set(arr.filter((r) => !r.isInWhatsapp && r.leadId).map((r) => r.leadId!)));
+      }
+
       const validos = arr.filter((r) => r.isInWhatsapp).length;
       toast.success(`${arr.length} verificado(s) — ${validos} com WhatsApp`);
     } catch (e) {
       toast.error("Erro: " + String(e instanceof Error ? e.message : e));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const excluirSemWhatsAppDaPasta = async () => {
+    if (!selecionadosExcluir.size) return;
+    if (!confirm(`Excluir ${selecionadosExcluir.size} contato(s) sem WhatsApp da pasta? Esta ação não pode ser desfeita.`)) return;
+
+    setExcluindo(true);
+    try {
+      const ids = [...selecionadosExcluir];
+      for (let i = 0; i < ids.length; i += 200) {
+        const lote = ids.slice(i, i + 200);
+        const { error } = await supabase.from("leads").delete().in("id", lote);
+        if (error) throw error;
+      }
+      setResultados((prev) => prev.filter((r) => !r.leadId || !selecionadosExcluir.has(r.leadId)));
+      setLeadsDaPasta((prev) => prev.filter((l) => !selecionadosExcluir.has(l.id)));
+      toast.success(`${ids.length} contato(s) excluído(s) da pasta`);
+      setSelecionadosExcluir(new Set());
+    } catch (e) {
+      toast.error("Erro ao excluir: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setExcluindo(false);
     }
   };
 
@@ -220,22 +331,62 @@ function Verificador() {
           )}
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Números de telefone</label>
-          <Textarea
-            placeholder={"5511912345678\n5521987654321\n11998765432"}
-            value={numeros}
-            onChange={(e) => setNumeros(e.target.value)}
-            rows={8}
-            className="font-mono text-sm resize-none"
-          />
-          <p className="text-xs text-muted-foreground">
-            Um número por linha (ou separados por vírgula). Com ou sem o código do país — o sistema adiciona{" "}
-            <code className="bg-muted px-1 rounded">55</code> automaticamente para números brasileiros de 10 ou 11 dígitos.
-          </p>
+        <div className="space-y-3">
+          <label className="text-sm font-medium">Números a verificar</label>
+          <Tabs value={origem} onValueChange={(v) => trocarOrigem(v as Origem)}>
+            <TabsList>
+              <TabsTrigger value="colar">Colar números</TabsTrigger>
+              <TabsTrigger value="pasta">Selecionar por pasta</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {origem === "colar" ? (
+            <div className="space-y-2">
+              <Textarea
+                placeholder={"5511912345678\n5521987654321\n11998765432"}
+                value={numeros}
+                onChange={(e) => setNumeros(e.target.value)}
+                rows={8}
+                className="font-mono text-sm resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                Um número por linha (ou separados por vírgula). Com ou sem o código do país — o sistema adiciona{" "}
+                <code className="bg-muted px-1 rounded">55</code> automaticamente para números brasileiros de 10 ou 11 dígitos.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {pastas.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhuma pasta criada ainda. Crie pastas em <span className="text-primary">Clientes/Leads</span>.</p>
+              ) : (
+                <div className="flex flex-wrap gap-4 p-3 bg-muted rounded max-h-40 overflow-y-auto">
+                  {pastas.map((p) => (
+                    <label key={p.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                      <Checkbox
+                        checked={pastasOrigemSel.includes(p.id)}
+                        onCheckedChange={() => togglePastaOrigem(p.id)}
+                      />
+                      <Folder className="w-3.5 h-3.5 text-primary shrink-0" />
+                      {p.nome}
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {carregandoLeads
+                  ? "Carregando leads das pastas selecionadas…"
+                  : pastasOrigemSel.length === 0
+                  ? "Selecione ao menos uma pasta."
+                  : `${leadsDaPasta.length} lead(s) encontrado(s) na(s) pasta(s) selecionada(s).`}
+              </p>
+            </div>
+          )}
         </div>
 
-        <Button onClick={verificar} disabled={loading || !instanciaId || !numeros.trim()}>
+        <Button
+          onClick={verificar}
+          disabled={loading || !instanciaId || carregandoLeads || (origem === "colar" ? !numeros.trim() : leadsDaPasta.length === 0)}
+        >
           {loading
             ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Verificando…</>
             : <><PhoneCall className="w-4 h-4 mr-2" />Verificar números</>}
@@ -273,6 +424,19 @@ function Verificador() {
               <Button variant="outline" size="sm" onClick={exportarResultados}>
                 <Download className="w-4 h-4 mr-2" />Exportar CSV
               </Button>
+              {origem === "pasta" && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={excluirSemWhatsAppDaPasta}
+                  disabled={selecionadosExcluir.size === 0 || excluindo}
+                >
+                  {excluindo
+                    ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    : <Trash2 className="w-4 h-4 mr-2" />}
+                  Excluir {selecionadosExcluir.size} sem WhatsApp da pasta
+                </Button>
+              )}
             </div>
           </div>
 
@@ -303,6 +467,7 @@ function Verificador() {
               <table className="w-full text-sm">
                 <thead className="border-b text-left text-muted-foreground bg-muted/30">
                   <tr>
+                    {origem === "pasta" && <th className="px-4 py-3 font-medium w-10">Excluir?</th>}
                     <th className="px-4 py-3 font-medium">Número consultado</th>
                     <th className="font-medium">Status</th>
                     <th className="font-medium hidden sm:table-cell">Nome verificado</th>
@@ -312,6 +477,23 @@ function Verificador() {
                 <tbody>
                   {filtrados.map((r, i) => (
                     <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
+                      {origem === "pasta" && (
+                        <td className="px-4 py-2.5">
+                          {!r.isInWhatsapp && r.leadId && (
+                            <Checkbox
+                              checked={selecionadosExcluir.has(r.leadId)}
+                              onCheckedChange={() =>
+                                setSelecionadosExcluir((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(r.leadId!)) next.delete(r.leadId!);
+                                  else next.add(r.leadId!);
+                                  return next;
+                                })
+                              }
+                            />
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-2.5 font-mono text-xs">{r.query}</td>
                       <td className="py-2.5">
                         {r.error ? (
@@ -346,7 +528,7 @@ function Verificador() {
                   ))}
                   {filtrados.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="p-10 text-center text-muted-foreground text-sm">
+                      <td colSpan={origem === "pasta" ? 5 : 4} className="p-10 text-center text-muted-foreground text-sm">
                         Nenhum resultado para este filtro.
                       </td>
                     </tr>
