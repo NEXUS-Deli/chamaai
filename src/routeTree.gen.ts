@@ -17,16 +17,18 @@ import { Route as AuthenticatedStoriesRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
-import { Route as AuthenticatedAtendimentoIaRouteImport } from './routes/_authenticated/atendimento-ia'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedFerramentasIndexRouteImport } from './routes/_authenticated/ferramentas.index'
 import { Route as AuthenticatedCampanhasIndexRouteImport } from './routes/_authenticated/campanhas.index'
+import { Route as AuthenticatedAtendimentoIaIndexRouteImport } from './routes/_authenticated/atendimento-ia.index'
 import { Route as AuthenticatedFerramentasVerificadorRouteImport } from './routes/_authenticated/ferramentas.verificador'
 import { Route as AuthenticatedFerramentasImportadorRouteImport } from './routes/_authenticated/ferramentas.importador'
 import { Route as AuthenticatedFerramentasExtratorRouteImport } from './routes/_authenticated/ferramentas.extrator'
 import { Route as AuthenticatedFerramentasBlacklistRouteImport } from './routes/_authenticated/ferramentas.blacklist'
 import { Route as AuthenticatedCampanhasNovaRouteImport } from './routes/_authenticated/campanhas.nova'
 import { Route as AuthenticatedCampanhasIdRouteImport } from './routes/_authenticated/campanhas.$id'
+import { Route as AuthenticatedAtendimentoIaNovaRouteImport } from './routes/_authenticated/atendimento-ia.nova'
+import { Route as AuthenticatedAtendimentoIaIdRouteImport } from './routes/_authenticated/atendimento-ia.$id'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -68,12 +70,6 @@ const AuthenticatedConfiguracoesRoute =
     path: '/configuracoes',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedAtendimentoIaRoute =
-  AuthenticatedAtendimentoIaRouteImport.update({
-    id: '/atendimento-ia',
-    path: '/atendimento-ia',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -89,6 +85,12 @@ const AuthenticatedCampanhasIndexRoute =
   AuthenticatedCampanhasIndexRouteImport.update({
     id: '/campanhas/',
     path: '/campanhas/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAtendimentoIaIndexRoute =
+  AuthenticatedAtendimentoIaIndexRouteImport.update({
+    id: '/atendimento-ia/',
+    path: '/atendimento-ia/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedFerramentasVerificadorRoute =
@@ -127,23 +129,37 @@ const AuthenticatedCampanhasIdRoute =
     path: '/campanhas/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAtendimentoIaNovaRoute =
+  AuthenticatedAtendimentoIaNovaRouteImport.update({
+    id: '/atendimento-ia/nova',
+    path: '/atendimento-ia/nova',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAtendimentoIaIdRoute =
+  AuthenticatedAtendimentoIaIdRouteImport.update({
+    id: '/atendimento-ia/$id',
+    path: '/atendimento-ia/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/admin': typeof AuthenticatedAdminRoute
-  '/atendimento-ia': typeof AuthenticatedAtendimentoIaRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/stories': typeof AuthenticatedStoriesRoute
   '/templates': typeof AuthenticatedTemplatesRoute
+  '/atendimento-ia/$id': typeof AuthenticatedAtendimentoIaIdRoute
+  '/atendimento-ia/nova': typeof AuthenticatedAtendimentoIaNovaRoute
   '/campanhas/$id': typeof AuthenticatedCampanhasIdRoute
   '/campanhas/nova': typeof AuthenticatedCampanhasNovaRoute
   '/ferramentas/blacklist': typeof AuthenticatedFerramentasBlacklistRoute
   '/ferramentas/extrator': typeof AuthenticatedFerramentasExtratorRoute
   '/ferramentas/importador': typeof AuthenticatedFerramentasImportadorRoute
   '/ferramentas/verificador': typeof AuthenticatedFerramentasVerificadorRoute
+  '/atendimento-ia/': typeof AuthenticatedAtendimentoIaIndexRoute
   '/campanhas/': typeof AuthenticatedCampanhasIndexRoute
   '/ferramentas/': typeof AuthenticatedFerramentasIndexRoute
 }
@@ -151,18 +167,20 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/admin': typeof AuthenticatedAdminRoute
-  '/atendimento-ia': typeof AuthenticatedAtendimentoIaRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/leads': typeof AuthenticatedLeadsRoute
   '/stories': typeof AuthenticatedStoriesRoute
   '/templates': typeof AuthenticatedTemplatesRoute
+  '/atendimento-ia/$id': typeof AuthenticatedAtendimentoIaIdRoute
+  '/atendimento-ia/nova': typeof AuthenticatedAtendimentoIaNovaRoute
   '/campanhas/$id': typeof AuthenticatedCampanhasIdRoute
   '/campanhas/nova': typeof AuthenticatedCampanhasNovaRoute
   '/ferramentas/blacklist': typeof AuthenticatedFerramentasBlacklistRoute
   '/ferramentas/extrator': typeof AuthenticatedFerramentasExtratorRoute
   '/ferramentas/importador': typeof AuthenticatedFerramentasImportadorRoute
   '/ferramentas/verificador': typeof AuthenticatedFerramentasVerificadorRoute
+  '/atendimento-ia': typeof AuthenticatedAtendimentoIaIndexRoute
   '/campanhas': typeof AuthenticatedCampanhasIndexRoute
   '/ferramentas': typeof AuthenticatedFerramentasIndexRoute
 }
@@ -172,18 +190,20 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
-  '/_authenticated/atendimento-ia': typeof AuthenticatedAtendimentoIaRoute
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/leads': typeof AuthenticatedLeadsRoute
   '/_authenticated/stories': typeof AuthenticatedStoriesRoute
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
+  '/_authenticated/atendimento-ia/$id': typeof AuthenticatedAtendimentoIaIdRoute
+  '/_authenticated/atendimento-ia/nova': typeof AuthenticatedAtendimentoIaNovaRoute
   '/_authenticated/campanhas/$id': typeof AuthenticatedCampanhasIdRoute
   '/_authenticated/campanhas/nova': typeof AuthenticatedCampanhasNovaRoute
   '/_authenticated/ferramentas/blacklist': typeof AuthenticatedFerramentasBlacklistRoute
   '/_authenticated/ferramentas/extrator': typeof AuthenticatedFerramentasExtratorRoute
   '/_authenticated/ferramentas/importador': typeof AuthenticatedFerramentasImportadorRoute
   '/_authenticated/ferramentas/verificador': typeof AuthenticatedFerramentasVerificadorRoute
+  '/_authenticated/atendimento-ia/': typeof AuthenticatedAtendimentoIaIndexRoute
   '/_authenticated/campanhas/': typeof AuthenticatedCampanhasIndexRoute
   '/_authenticated/ferramentas/': typeof AuthenticatedFerramentasIndexRoute
 }
@@ -193,18 +213,20 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/admin'
-    | '/atendimento-ia'
     | '/configuracoes'
     | '/dashboard'
     | '/leads'
     | '/stories'
     | '/templates'
+    | '/atendimento-ia/$id'
+    | '/atendimento-ia/nova'
     | '/campanhas/$id'
     | '/campanhas/nova'
     | '/ferramentas/blacklist'
     | '/ferramentas/extrator'
     | '/ferramentas/importador'
     | '/ferramentas/verificador'
+    | '/atendimento-ia/'
     | '/campanhas/'
     | '/ferramentas/'
   fileRoutesByTo: FileRoutesByTo
@@ -212,18 +234,20 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/admin'
-    | '/atendimento-ia'
     | '/configuracoes'
     | '/dashboard'
     | '/leads'
     | '/stories'
     | '/templates'
+    | '/atendimento-ia/$id'
+    | '/atendimento-ia/nova'
     | '/campanhas/$id'
     | '/campanhas/nova'
     | '/ferramentas/blacklist'
     | '/ferramentas/extrator'
     | '/ferramentas/importador'
     | '/ferramentas/verificador'
+    | '/atendimento-ia'
     | '/campanhas'
     | '/ferramentas'
   id:
@@ -232,18 +256,20 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/admin'
-    | '/_authenticated/atendimento-ia'
     | '/_authenticated/configuracoes'
     | '/_authenticated/dashboard'
     | '/_authenticated/leads'
     | '/_authenticated/stories'
     | '/_authenticated/templates'
+    | '/_authenticated/atendimento-ia/$id'
+    | '/_authenticated/atendimento-ia/nova'
     | '/_authenticated/campanhas/$id'
     | '/_authenticated/campanhas/nova'
     | '/_authenticated/ferramentas/blacklist'
     | '/_authenticated/ferramentas/extrator'
     | '/_authenticated/ferramentas/importador'
     | '/_authenticated/ferramentas/verificador'
+    | '/_authenticated/atendimento-ia/'
     | '/_authenticated/campanhas/'
     | '/_authenticated/ferramentas/'
   fileRoutesById: FileRoutesById
@@ -312,13 +338,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedConfiguracoesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/atendimento-ia': {
-      id: '/_authenticated/atendimento-ia'
-      path: '/atendimento-ia'
-      fullPath: '/atendimento-ia'
-      preLoaderRoute: typeof AuthenticatedAtendimentoIaRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/admin': {
       id: '/_authenticated/admin'
       path: '/admin'
@@ -338,6 +357,13 @@ declare module '@tanstack/react-router' {
       path: '/campanhas'
       fullPath: '/campanhas/'
       preLoaderRoute: typeof AuthenticatedCampanhasIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/atendimento-ia/': {
+      id: '/_authenticated/atendimento-ia/'
+      path: '/atendimento-ia'
+      fullPath: '/atendimento-ia/'
+      preLoaderRoute: typeof AuthenticatedAtendimentoIaIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/ferramentas/verificador': {
@@ -382,35 +408,52 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCampanhasIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/atendimento-ia/nova': {
+      id: '/_authenticated/atendimento-ia/nova'
+      path: '/atendimento-ia/nova'
+      fullPath: '/atendimento-ia/nova'
+      preLoaderRoute: typeof AuthenticatedAtendimentoIaNovaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/atendimento-ia/$id': {
+      id: '/_authenticated/atendimento-ia/$id'
+      path: '/atendimento-ia/$id'
+      fullPath: '/atendimento-ia/$id'
+      preLoaderRoute: typeof AuthenticatedAtendimentoIaIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
-  AuthenticatedAtendimentoIaRoute: typeof AuthenticatedAtendimentoIaRoute
   AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
   AuthenticatedStoriesRoute: typeof AuthenticatedStoriesRoute
   AuthenticatedTemplatesRoute: typeof AuthenticatedTemplatesRoute
+  AuthenticatedAtendimentoIaIdRoute: typeof AuthenticatedAtendimentoIaIdRoute
+  AuthenticatedAtendimentoIaNovaRoute: typeof AuthenticatedAtendimentoIaNovaRoute
   AuthenticatedCampanhasIdRoute: typeof AuthenticatedCampanhasIdRoute
   AuthenticatedCampanhasNovaRoute: typeof AuthenticatedCampanhasNovaRoute
   AuthenticatedFerramentasBlacklistRoute: typeof AuthenticatedFerramentasBlacklistRoute
   AuthenticatedFerramentasExtratorRoute: typeof AuthenticatedFerramentasExtratorRoute
   AuthenticatedFerramentasImportadorRoute: typeof AuthenticatedFerramentasImportadorRoute
   AuthenticatedFerramentasVerificadorRoute: typeof AuthenticatedFerramentasVerificadorRoute
+  AuthenticatedAtendimentoIaIndexRoute: typeof AuthenticatedAtendimentoIaIndexRoute
   AuthenticatedCampanhasIndexRoute: typeof AuthenticatedCampanhasIndexRoute
   AuthenticatedFerramentasIndexRoute: typeof AuthenticatedFerramentasIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
-  AuthenticatedAtendimentoIaRoute: AuthenticatedAtendimentoIaRoute,
   AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
   AuthenticatedStoriesRoute: AuthenticatedStoriesRoute,
   AuthenticatedTemplatesRoute: AuthenticatedTemplatesRoute,
+  AuthenticatedAtendimentoIaIdRoute: AuthenticatedAtendimentoIaIdRoute,
+  AuthenticatedAtendimentoIaNovaRoute: AuthenticatedAtendimentoIaNovaRoute,
   AuthenticatedCampanhasIdRoute: AuthenticatedCampanhasIdRoute,
   AuthenticatedCampanhasNovaRoute: AuthenticatedCampanhasNovaRoute,
   AuthenticatedFerramentasBlacklistRoute:
@@ -420,6 +463,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedFerramentasImportadorRoute,
   AuthenticatedFerramentasVerificadorRoute:
     AuthenticatedFerramentasVerificadorRoute,
+  AuthenticatedAtendimentoIaIndexRoute: AuthenticatedAtendimentoIaIndexRoute,
   AuthenticatedCampanhasIndexRoute: AuthenticatedCampanhasIndexRoute,
   AuthenticatedFerramentasIndexRoute: AuthenticatedFerramentasIndexRoute,
 }

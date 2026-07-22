@@ -16,7 +16,17 @@ export interface AIConfig {
   responder_audio: boolean
   responder_imagem: boolean
   openai_key_transcricao: string | null
+  restringir_horario: boolean
+  horario_inicio: string
+  horario_fim: string
+  dias_semana: number[]
+  mensagem_fora_horario: string | null
+  transferencia_ativa: boolean
+  transferencia_telefone: string | null
 }
+
+/** Marca que a IA inclui no final da resposta quando decide transferir para um humano — removida antes de qualquer envio/gravação. */
+export const HANDOFF_MARKER = '[[TRANSFERIR_HUMANO]]'
 
 export interface ConversaMessage {
   role: 'user' | 'assistant'
@@ -93,14 +103,43 @@ export function splitMessage(text: string): string[] {
   return parts.length > 1 ? parts : [text.trim()]
 }
 
+/** Checa se `at` cai dentro do horário/dias configurados do agente (BRT = UTC-3, mesmo cálculo usado em disparo-cron's estaNoHorario). */
+export function isWithinBusinessHours(
+  cfg: { horario_inicio: string; horario_fim: string; dias_semana: number[] },
+  at: Date = new Date(),
+): boolean {
+  const horaBRT = (at.getUTCHours() - 3 + 24) % 24
+  const minBRT = at.getUTCMinutes()
+  const diaBRT = new Date(at.getTime() - 3 * 60 * 60 * 1000).getUTCDay()
+
+  if (!cfg.dias_semana.includes(diaBRT)) return false
+
+  const total = horaBRT * 60 + minBRT
+  const [hI, mI] = cfg.horario_inicio.split(':').map(Number)
+  const [hF, mF] = cfg.horario_fim.split(':').map(Number)
+  const inicioMin = hI * 60 + mI
+  const fimMin = (hF === 0 && mF === 0) ? 24 * 60 : hF * 60 + mF
+  return total >= inicioMin && total <= fimMin
+}
+
 // ── uazapi: envio e download de mídia ───────────────────────────────────────
 
-export async function sendText(jid: string, text: string, token: string): Promise<void> {
+interface SendTextOptions {
+  /** Marca o chat inteiro como lido (remove o contador de não lidas) */
+  readchat?: boolean
+  /** Marca as últimas mensagens recebidas do contato como lidas (double-check azul) */
+  readmessages?: boolean
+}
+
+export async function sendText(jid: string, text: string, token: string, opts: SendTextOptions = {}): Promise<void> {
   try {
+    const body: Record<string, unknown> = { number: jid, text }
+    if (opts.readchat) body.readchat = true
+    if (opts.readmessages) body.readmessages = true
     await fetch(`${UAZAPI_BASE_URL}/send/text`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', token },
-      body: JSON.stringify({ number: jid, text }),
+      body: JSON.stringify(body),
     })
   } catch (e) {
     console.error('[ai-agent-core] sendText error:', e)
@@ -268,7 +307,10 @@ export async function callAI(
   currentImages: ContentPart[],
 ): Promise<string> {
   const model = config.modelo || DEFAULT_MODELS[config.provedor] || DEFAULT_MODELS.openai
-  const systemPrompt = config.system_prompt || 'Você é um assistente útil do WhatsApp. Responda de forma breve e natural em português.'
+  let systemPrompt = config.system_prompt || 'Você é um assistente útil do WhatsApp. Responda de forma breve e natural em português.'
+  if (config.transferencia_ativa) {
+    systemPrompt += `\n\nSe o cliente pedir para falar com um atendente humano, ou se a situação estiver além do que você consegue resolver, termine sua resposta incluindo exatamente a marca ${HANDOFF_MARKER} (o cliente nunca vê essa marca — ela é removida automaticamente antes do envio).`
+  }
   const historyMessages = history.map(h => ({ role: h.role, content: h.mensagem }))
 
   if (config.provedor === 'claude') {
@@ -365,6 +407,77 @@ export async function callAI(
   return data.choices[0].message.content
 }
 
+// ── Fora do horário comercial configurado: caminho leve, sem IA ─────────────
+
+async function handleOutsideHours(
+  supabase: SupabaseClient,
+  instancia: InstanciaInfo,
+  fromJid: string,
+  fromPhone: string,
+  aiConfig: AIConfig,
+  items: BufferItem[],
+): Promise<void> {
+  const combinedText = items
+    .map(i => i.tipo === 'texto' ? (i.texto ?? '') : `[${i.tipo}]`)
+    .filter(Boolean)
+    .join('\n')
+
+  await supabase.from('ai_conversas').insert({
+    usuario_id: instancia.usuario_id,
+    instancia_id: instancia.id,
+    numero: fromPhone,
+    role: 'user',
+    mensagem: combinedText || '[mensagem fora do horário comercial]',
+  })
+
+  if (aiConfig.mensagem_fora_horario?.trim()) {
+    await sendText(fromJid, aiConfig.mensagem_fora_horario, instancia.token, { readchat: true, readmessages: true })
+    await supabase.from('ai_conversas').insert({
+      usuario_id: instancia.usuario_id,
+      instancia_id: instancia.id,
+      numero: fromPhone,
+      role: 'assistant',
+      mensagem: aiConfig.mensagem_fora_horario,
+    })
+  }
+
+  console.log(`[ai-agent-core] fora do horário comercial configurado — ${fromPhone} não foi processado pela IA`)
+}
+
+// ── Transferência para atendimento humano ───────────────────────────────────
+
+async function handleHandoff(
+  supabase: SupabaseClient,
+  instancia: InstanciaInfo,
+  fromPhone: string,
+  aiConfig: AIConfig,
+  ultimaMensagem: string,
+): Promise<void> {
+  // A IA para de responder este contato até um humano removê-lo da lista de
+  // Contatos Excluídos (já existente na página do agente).
+  await supabase.from('ai_contatos_excluidos').upsert({
+    usuario_id: instancia.usuario_id,
+    instancia_id: instancia.id,
+    telefone: fromPhone,
+    nome: 'Transferido para atendimento humano',
+  }, { onConflict: 'instancia_id,telefone' })
+
+  const resumo = ultimaMensagem.slice(0, 200)
+  const aviso = `🔔 *Atendimento humano solicitado*\nContato: ${fromPhone}\nÚltima mensagem: "${resumo}"`
+
+  if (aiConfig.transferencia_telefone) {
+    await sendText(toJid(aiConfig.transferencia_telefone), aviso, instancia.token)
+  }
+
+  await supabase.from('notificacoes').insert({
+    usuario_id: instancia.usuario_id,
+    titulo: 'Cliente pediu atendimento humano',
+    mensagem: `${fromPhone}: "${resumo}"`,
+    tipo: 'aviso',
+    link: `/atendimento-ia/${instancia.id}`,
+  })
+}
+
 // ── Processamento de um lote já reivindicado do buffer ──────────────────────
 
 export async function processarLote(
@@ -409,14 +522,21 @@ export async function processarLote(
     const aiResponse = await callAI(aiConfig, history, combinedText, images)
     console.log(`[ai-agent-core] AI response (${aiConfig.provedor}): ${aiResponse.slice(0, 200)}`)
 
-    const parts = splitMessage(aiResponse)
+    const wantsHandoff = aiConfig.transferencia_ativa && aiResponse.includes(HANDOFF_MARKER)
+    const respostaFinal = aiResponse.split(HANDOFF_MARKER).join('').trim()
+      || (wantsHandoff ? 'Vou te transferir para um atendente, aguarde um instante.' : aiResponse)
+
+    const parts = splitMessage(respostaFinal)
     for (let i = 0; i < parts.length; i++) {
       if (i > 0) {
         await sleep(800)
         await sendComposing(fromJid, instancia.token)
         await sleep(600)
       }
-      await sendText(fromJid, parts[i], instancia.token)
+      // Marca o chat e as últimas mensagens do contato como lidas junto com a
+      // primeira parte da resposta — só precisa acontecer uma vez por lote,
+      // deixa a conversa com o double-check azul como um atendimento humano real.
+      await sendText(fromJid, parts[i], instancia.token, i === 0 ? { readchat: true, readmessages: true } : undefined)
     }
 
     await supabase.from('ai_conversas').insert({
@@ -424,8 +544,12 @@ export async function processarLote(
       instancia_id: instancia.id,
       numero: fromPhone,
       role: 'assistant',
-      mensagem: aiResponse,
+      mensagem: respostaFinal,
     })
+
+    if (wantsHandoff) {
+      await handleHandoff(supabase, instancia, fromPhone, aiConfig, combinedText)
+    }
 
     const { data: oldMsgs } = await supabase
       .from('ai_conversas')
@@ -475,13 +599,6 @@ export async function handleClaimedBuffer(
     return
   }
 
-  const { data: aiInst } = await supabase
-    .from('ai_instancias')
-    .select('ativo')
-    .eq('instancia_id', instanciaId)
-    .maybeSingle()
-  if (!aiInst?.ativo) return
-
   const { data: excluido } = await supabase
     .from('ai_contatos_excluidos')
     .select('id')
@@ -492,10 +609,15 @@ export async function handleClaimedBuffer(
 
   const { data: aiConfigRow } = await supabase
     .from('ai_configuracoes')
-    .select('provedor, api_key, modelo, system_prompt, buffer_segundos, responder_audio, responder_imagem, openai_key_transcricao')
-    .eq('usuario_id', instancia.usuario_id)
+    .select('ativo, provedor, api_key, modelo, system_prompt, buffer_segundos, responder_audio, responder_imagem, openai_key_transcricao, restringir_horario, horario_inicio, horario_fim, dias_semana, mensagem_fora_horario, transferencia_ativa, transferencia_telefone')
+    .eq('instancia_id', instanciaId)
     .maybeSingle()
-  if (!aiConfigRow?.api_key) return
+  if (!aiConfigRow?.ativo || !aiConfigRow?.api_key) return
+
+  if (aiConfigRow.restringir_horario && !isWithinBusinessHours(aiConfigRow)) {
+    await handleOutsideHours(supabase, { id: instancia.id, usuario_id: instancia.usuario_id, token: instancia.token }, toJid(numero), numero, aiConfigRow as AIConfig, items)
+    return
+  }
 
   await processarLote(
     supabase,

@@ -2,17 +2,30 @@
 -- Atendimento com IA — tabelas do agente de IA por WhatsApp
 -- ============================================================
 
--- Configuração de IA por usuário (provedor, chave, prompt, modelo)
+-- Um agente de IA por instância WhatsApp (provedor, chave, prompt, modelo)
 CREATE TABLE IF NOT EXISTS public.ai_configuracoes (
   id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   usuario_id    UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  instancia_id  UUID        NOT NULL REFERENCES public.instancias(id) ON DELETE CASCADE,
+  nome          TEXT,
+  ativo         BOOLEAN     NOT NULL DEFAULT true,
   provedor      TEXT        NOT NULL DEFAULT 'openai',
   api_key       TEXT,
   modelo        TEXT,
   system_prompt TEXT        DEFAULT 'Você é um assistente útil do WhatsApp. Responda de forma breve, natural e em português.',
+  -- Horário comercial: fora dele o agente não chama a IA, só (opcionalmente) responde com mensagem_fora_horario.
+  restringir_horario     BOOLEAN   NOT NULL DEFAULT false,
+  horario_inicio         TEXT      NOT NULL DEFAULT '09:00',
+  horario_fim            TEXT      NOT NULL DEFAULT '18:00',
+  dias_semana            INTEGER[] NOT NULL DEFAULT '{1,2,3,4,5}', -- 0=domingo … 6=sábado
+  mensagem_fora_horario  TEXT,
+  -- Transferência para humano: a própria IA decide (ver HANDOFF_MARKER em ai-agent-core.ts).
+  transferencia_ativa    BOOLEAN   NOT NULL DEFAULT false,
+  transferencia_telefone TEXT,
+  transferencia_email    TEXT,
   criado_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
   atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(usuario_id)
+  UNIQUE(instancia_id)
 );
 
 ALTER TABLE public.ai_configuracoes ENABLE ROW LEVEL SECURITY;
@@ -23,23 +36,7 @@ CREATE POLICY "own_ai_configuracoes" ON public.ai_configuracoes
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.ai_configuracoes TO authenticated;
 GRANT ALL ON public.ai_configuracoes TO service_role;
 
--- Habilitação do agente de IA por instância WhatsApp
-CREATE TABLE IF NOT EXISTS public.ai_instancias (
-  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  usuario_id   UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  instancia_id UUID        NOT NULL REFERENCES public.instancias(id) ON DELETE CASCADE,
-  ativo        BOOLEAN     NOT NULL DEFAULT false,
-  criado_em    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(instancia_id)
-);
-
-ALTER TABLE public.ai_instancias ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "own_ai_instancias" ON public.ai_instancias
-  FOR ALL USING (auth.uid() = usuario_id) WITH CHECK (auth.uid() = usuario_id);
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.ai_instancias TO authenticated;
-GRANT ALL ON public.ai_instancias TO service_role;
+DROP TABLE IF EXISTS public.ai_instancias;
 
 -- Contatos excluídos do agente de IA (por instância)
 CREATE TABLE IF NOT EXISTS public.ai_contatos_excluidos (

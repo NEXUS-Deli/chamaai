@@ -123,17 +123,6 @@ serve(async (req) => {
       return ok({ skipped: 'instance not found' })
     }
 
-    // Verifica se o agente de IA está ativo para essa instância
-    const { data: aiInst } = await supabase
-      .from('ai_instancias')
-      .select('ativo')
-      .eq('instancia_id', instancia.id)
-      .maybeSingle()
-
-    if (!aiInst?.ativo) {
-      return ok({ skipped: 'AI not enabled for instance' })
-    }
-
     const fromJid = toJid(fromRaw)
     const fromPhone = jidToPhone(fromJid)
 
@@ -149,15 +138,19 @@ serve(async (req) => {
       return ok({ skipped: 'contact excluded' })
     }
 
-    // Busca configuração de IA do usuário
+    // Busca o agente de IA desta instância
     const { data: aiConfig } = await supabase
       .from('ai_configuracoes')
-      .select('provedor, api_key, modelo, system_prompt, buffer_segundos, responder_audio, responder_imagem, openai_key_transcricao')
-      .eq('usuario_id', instancia.usuario_id)
+      .select('ativo, provedor, api_key, modelo, system_prompt, buffer_segundos, responder_audio, responder_imagem, openai_key_transcricao')
+      .eq('instancia_id', instancia.id)
       .maybeSingle()
 
+    if (!aiConfig?.ativo) {
+      return ok({ skipped: 'AI not enabled for instance' })
+    }
+
     if (!aiConfig?.api_key) {
-      console.log(`[ai-agent-webhook] AI config ausente para usuário ${instancia.usuario_id}`)
+      console.log(`[ai-agent-webhook] AI config sem chave de API para instância ${instancia.id}`)
       return ok({ skipped: 'AI config not found or missing API key' })
     }
 
