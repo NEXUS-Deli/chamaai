@@ -57,25 +57,45 @@ serve(async (req) => {
       return ok({ skipped: `not a messages event: ${eventType}` })
     }
 
-    // Extrai dados da mensagem — formato nexus-360 usa objeto ev
-    const ev = body?.event && typeof body.event === 'object' && !Array.isArray(body.event)
-      ? body.event as Record<string, unknown>
-      : null
+    // Extrai dados da mensagem — nexus-360 manda o evento "messages" com o
+    // objeto da mensagem em "message" (irmão de "EventType"/"chat"), confirmado
+    // em produção via Monitor de Eventos. "event" fica como fallback defensivo
+    // para outras variantes do uazapi que aninhem os dados diferente.
+    const msg = body?.message && typeof body.message === 'object' && !Array.isArray(body.message)
+      ? body.message as Record<string, unknown>
+      : (body?.event && typeof body.event === 'object' && !Array.isArray(body.event)
+        ? body.event as Record<string, unknown>
+        : null)
 
-    if (!ev) {
-      return ok({ skipped: 'no event object' })
+    if (!msg) {
+      return ok({ skipped: 'no message object' })
     }
 
-    const fromRaw: string = String(ev?.From ?? ev?.from ?? ev?.RemoteJid ?? ev?.remoteJid ?? '').trim()
-    const isGroup: boolean = Boolean(ev?.IsGroup ?? ev?.isGroup ?? fromRaw.includes('@g.us'))
-    const rawType: string = String(ev?.Type ?? ev?.type ?? ev?.MType ?? ev?.mtype ?? '').toLowerCase()
-    const messageBody: string = String(ev?.Body ?? ev?.body ?? ev?.Text ?? ev?.text ?? ev?.message ?? '').trim()
+    // Ignora mensagens enviadas por nós mesmos (ex: resposta manual no app da
+    // uazapi) — sem isso, o webhook trataria nossa própria mensagem como se
+    // fosse do contato e a IA responderia a si mesma.
+    const fromMe: boolean = Boolean(msg?.fromMe ?? msg?.FromMe ?? false)
+    if (fromMe) return ok({ skipped: 'message sent by us' })
+
+    const fromRaw: string = String(msg?.chatid ?? msg?.ChatId ?? msg?.From ?? msg?.from ?? msg?.RemoteJid ?? msg?.remoteJid ?? '').trim()
+    const isGroup: boolean = Boolean(msg?.isGroup ?? msg?.IsGroup) || Boolean(msg?.groupName) || fromRaw.includes('@g.us')
+    // "type" no nexus-360 vem sempre "media" pra áudio/imagem/vídeo (não serve
+    // pra diferenciar) — quem diferencia de verdade é "mediaType"
+    // ("ptt"/"image"/"video"/…), confirmado com payloads reais; "messageType"
+    // ("AudioMessage"/"ImageMessage"/…) fica como próximo fallback, e "type"
+    // só entra por último (cobre o caso de texto, onde "media" nem existe).
+    const rawType: string = String(msg?.mediaType ?? msg?.messageType ?? msg?.Type ?? msg?.type ?? msg?.MType ?? msg?.mtype ?? '').toLowerCase()
+    // "content" vira OBJETO (URL/mimetype/mediaKey/…) em mensagens de mídia —
+    // só usa como texto quando for string, senão messageBody viraria "[object Object]".
+    const rawContent = msg?.content
+    const messageBody: string = String(
+      msg?.text ?? msg?.Text ?? (typeof rawContent === 'string' ? rawContent : '') ?? msg?.Body ?? msg?.body ?? ''
+    ).trim()
     // Id da mensagem, necessário para baixar áudio/imagem via /message/download.
-    // Nome exato do campo ainda não confirmado em produção para eventos "messages"
-    // (só está confirmado para "messages_update", ver disparo-webhook) — por isso
-    // a extração é defensiva, com várias variantes de nome, e o payload bruto é
-    // logado para os tipos não-texto até confirmarmos em logs reais.
-    const mediaId: string = String(ev?.Id ?? ev?.ID ?? ev?.MessageID ?? ev?.messageid ?? ev?.id ?? '').trim()
+    // "messageid" é o id "puro" da mensagem no protocolo WhatsApp (confirmado em
+    // payloads reais de áudio/imagem/vídeo); "id" no nexus-360 vem como
+    // "OWNER:messageid" (uso interno deles) — por isso messageid tem prioridade.
+    const mediaId: string = String(msg?.messageid ?? msg?.id ?? msg?.Id ?? msg?.ID ?? msg?.MessageID ?? '').trim()
 
     console.log(`[ai-agent-webhook] from="${fromRaw}" isGroup=${isGroup} type="${rawType}" body="${messageBody.slice(0, 100)}" mediaId="${mediaId}"`)
 
@@ -95,7 +115,7 @@ serve(async (req) => {
 
     if (tipo === 'texto' && !messageBody) return ok({ skipped: 'empty message body' })
     if ((tipo === 'audio' || tipo === 'imagem') && !mediaId) {
-      console.log(`[ai-agent-webhook] tipo="${tipo}" sem id de mídia identificável, payload bruto do evento:`, JSON.stringify(ev).slice(0, 1000))
+      console.log(`[ai-agent-webhook] tipo="${tipo}" sem id de mídia identificável, payload bruto da mensagem:`, JSON.stringify(msg).slice(0, 1000))
       return ok({ skipped: `media type "${tipo}" without identifiable message id` })
     }
 
