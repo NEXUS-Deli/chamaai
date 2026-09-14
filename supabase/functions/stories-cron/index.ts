@@ -3,13 +3,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-const UAZAPI_BASE_URL = Deno.env.get("UAZAPI_BASE_URL") || "https://nexus-360.uazapi.com"
+const UAZAPI_BASE_URL = Deno.env.get("UAZAPI_BASE_URL") || "https://conectanegocios.uazapi.com"
 
 // Formato "número WhatsApp" pedido pela doc do /send/status (ex: "5511999999999",
-// SEMPRE com o código do país "55" — diferente do formatarTelefone usado em
-// disparo-cron, que remove o "55" pra outro fluxo/endpoint).
+// SEMPRE com o código do país "55").
 function paraNumeroWhatsapp(phone: string): string {
   let digits = phone.replace(/\D/g, '')
+  if (!digits) return ''
   if (!digits.startsWith('55')) digits = '55' + digits
   const local = digits.slice(2)
   const ddd = local.slice(0, 2)
@@ -19,14 +19,40 @@ function paraNumeroWhatsapp(phone: string): string {
   return `55${ddd}${numero}`
 }
 
-// Busca todos os leads do usuário (paginado — PostgREST limita 1000 linhas
-// por chamada) e devolve os números únicos, prontos pra virar "recipients" do
-// story. A sessão da API não usa a agenda nativa do WhatsApp do celular
-// conectado pra decidir quem vê o status — precisa receber a lista explícita.
-// Não corta pelo limite aqui: manda a lista inteira e deixa o "max_recipients"
-// (enviado junto) fazer o corte determinístico do lado da uazapi, como a doc
-// recomenda pro modo "envio parcial" combinado com "envio explícito".
-async function buscarDestinatarios(
+// Busca contatos direto da agenda do WhatsApp da instância conectada na UAZAPI
+async function buscarContatosDaInstancia(baseUrl: string, token: string): Promise<string[]> {
+  const telefones = new Set<string>()
+  const scopes = ['address_book', 'chats']
+
+  for (const scope of scopes) {
+    try {
+      const url = `${baseUrl}/contacts?contactScope=${scope}&page=1&limit=2000`
+      const resp = await fetch(url, {
+        method: "GET",
+        headers: { "Accept": "application/json", "token": token },
+      })
+      if (!resp.ok) continue
+      const data = await resp.json().catch(() => null)
+      const list = Array.isArray(data) ? data : data?.contacts || data?.data || []
+      for (const item of list) {
+        const jid = String(item?.jid || item?.id || item?.number || '')
+        if (jid.includes('@g.us') || jid.includes('@broadcast')) continue
+        const num = jid.split('@')[0].replace(/\D/g, '')
+        if (num.length >= 8) {
+          const wppNum = paraNumeroWhatsapp(num)
+          if (wppNum) telefones.add(wppNum)
+        }
+      }
+    } catch (e) {
+      console.warn(`[stories-cron] Falha ao buscar contatos da instância (${scope}):`, e)
+    }
+  }
+
+  return Array.from(telefones)
+}
+
+// Busca todos os leads do usuário salvos no banco de dados (paginado)
+async function buscarDestinatariosLeads(
   supabase: ReturnType<typeof createClient>,
   usuarioId: string,
 ): Promise<string[]> {
@@ -43,7 +69,10 @@ async function buscarDestinatarios(
 
     const batch = (data ?? []) as { telefone: string }[]
     for (const l of batch) {
-      if (l.telefone) telefones.add(paraNumeroWhatsapp(l.telefone))
+      if (l.telefone) {
+        const wppNum = paraNumeroWhatsapp(l.telefone)
+        if (wppNum) telefones.add(wppNum)
+      }
     }
     if (batch.length < BATCH) break
     from += BATCH
@@ -117,19 +146,46 @@ serve(async () => {
       if (ag.legenda) payloadBase.text = ag.legenda
     }
 
-    if (ag.max_recipients) payloadBase.max_recipients = ag.max_recipients
-
-    // Lista explícita de destinatários (todos os leads salvos do usuário) —
-    // sem isso o story não tem audiência, já que a sessão da API não usa a
-    // agenda nativa do WhatsApp do celular conectado. Manda a lista inteira;
-    // "max_recipients" acima já faz o corte determinístico do lado da uazapi.
-    const recipients = await buscarDestinatarios(supabase, ag.usuario_id)
-    if (recipients.length > 0) payloadBase.recipients = recipients
-    console.log(`[stories-cron] ${recipients.length} destinatário(s) para o agendamento ${ag.id}`)
+    // Configurações de público e destinatários
+    const metaConfig = (ag.resultado as Record<string, unknown>) || {}
+    const publicoAlvo = String(metaConfig.publico_alvo || "whatsapp")
+    const recipientsPreSalvos = Array.isArray(metaConfig.recipients) ? (metaConfig.recipients as string[]) : []
 
     // Envia para cada instância selecionada
     for (const inst of instancias) {
       try {
+        const payloadInst = { ...payloadBase }
+        const listaDestinatarios = new Set<string>()
+
+        // 1. Destinatários pré-salvos no agendamento
+        for (const r of recipientsPreSalvos) {
+          const w = paraNumeroWhatsapp(r)
+          if (w) listaDestinatarios.add(w)
+        }
+
+        // 2. Se público envolve agenda do WhatsApp (padrão)
+        if (publicoAlvo === "whatsapp" || publicoAlvo === "ambos" || listaDestinatarios.size === 0) {
+          console.log(`[stories-cron] Buscando contatos da agenda da instância ${inst.nome}...`)
+          const contatosInst = await buscarContatosDaInstancia(UAZAPI_BASE_URL, inst.token)
+          for (const c of contatosInst) listaDestinatarios.add(c)
+        }
+
+        // 3. Se público envolve leads salvos no sistema
+        if (publicoAlvo === "leads" || publicoAlvo === "ambos") {
+          const leads = await buscarDestinatariosLeads(supabase, ag.usuario_id)
+          for (const l of leads) listaDestinatarios.add(l)
+        }
+
+        const recipientsFinal = Array.from(listaDestinatarios)
+        if (recipientsFinal.length > 0) {
+          payloadInst.recipients = recipientsFinal
+        }
+
+        const maxRec = Math.max(Number(ag.max_recipients) || 2000, recipientsFinal.length || 100)
+        payloadInst.max_recipients = maxRec
+
+        console.log(`[stories-cron] Enviando status para ${inst.nome} com ${recipientsFinal.length} destinatários (max: ${maxRec})`)
+
         const resp = await fetch(`${UAZAPI_BASE_URL}/send/status`, {
           method: "POST",
           headers: {
@@ -137,23 +193,20 @@ serve(async () => {
             "Accept": "application/json",
             "token": inst.token,
           },
-          body: JSON.stringify(payloadBase),
+          body: JSON.stringify(payloadInst),
         })
 
         const respData = await resp.json().catch(() => ({}))
-        // Guarda o debug da uazapi (contagens, motivos de descarte por
-        // recipient, etc.) no resultado — essencial pra diagnosticar se a
-        // audiência veio vazia/parcial mesmo com resp.ok.
         const debugInfo = (respData as Record<string, unknown>)?.debug
 
         if (!resp.ok) {
           const msg = (respData as Record<string, string>)?.error || `HTTP ${resp.status}`
           console.error(`[stories-cron] Erro na instância ${inst.nome}: ${msg}`, debugInfo ?? "")
-          resultados.push({ instancia: inst.nome, ok: false, erro: msg, debug: debugInfo })
+          resultados.push({ instancia: inst.nome, ok: false, erro: msg, debug: debugInfo, destinatarios: recipientsFinal.length })
           totalErros++
         } else {
-          console.log(`[stories-cron] OK: ${inst.nome}`, debugInfo ?? "")
-          resultados.push({ instancia: inst.nome, ok: true, debug: debugInfo })
+          console.log(`[stories-cron] OK: ${inst.nome} (enviado para ${recipientsFinal.length} contatos)`)
+          resultados.push({ instancia: inst.nome, ok: true, debug: debugInfo, destinatarios: recipientsFinal.length })
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -166,7 +219,14 @@ serve(async () => {
     const novoStatus = totalErros === instancias.length ? "erro" : "enviado"
     await supabase
       .from("stories_agendamentos")
-      .update({ status: novoStatus, resultado: { instancias: resultados } })
+      .update({
+        status: novoStatus,
+        resultado: {
+          instancias: resultados,
+          publico_alvo: publicoAlvo,
+          total_destinatarios: resultados.reduce((acc, r: any) => Math.max(acc, r.destinatarios || 0), 0)
+        }
+      })
       .eq("id", ag.id)
 
     // Notificação interna
@@ -201,7 +261,7 @@ serve(async () => {
         ...agBase,
         status: "pendente",
         agendado_para: proxima.toISOString(),
-        resultado: null,
+        resultado: { publico_alvo: publicoAlvo, recipients: recipientsPreSalvos },
       })
       console.log(`[stories-cron] Próxima execução recorrente agendada para ${proxima.toISOString()}`)
     }

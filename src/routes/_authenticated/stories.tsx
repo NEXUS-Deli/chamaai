@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
   Plus, Clapperboard, Clock, CheckCircle2, XCircle, Loader2,
   Trash2, Send, Image, Video, Type, CalendarClock, AlertTriangle,
-  RefreshCw,
+  RefreshCw, Users, Smartphone, Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -268,6 +268,18 @@ function AgendamentoCard({
   );
 }
 
+function formatarNumeroWhatsapp(phone: string): string {
+  let digits = phone.replace(/\D/g, "");
+  if (!digits) return "";
+  if (!digits.startsWith("55")) digits = "55" + digits;
+  const local = digits.slice(2);
+  const ddd = local.slice(0, 2);
+  let numero = local.slice(2);
+  if (numero.length === 8 && ["6", "7", "8", "9"].includes(numero[0])) numero = "9" + numero;
+  if (numero.length > 9) numero = numero.slice(-9);
+  return `55${ddd}${numero}`;
+}
+
 function NovoAgendamentoModal({
   open, onClose, instancias, onSalvo,
 }: {
@@ -285,13 +297,17 @@ function NovoAgendamentoModal({
   const [fileBase64, setFileBase64] = useState("");
   const [mimetype, setMimetype] = useState("");
   const [legenda, setLegenda] = useState("");
-  const [maxRecipients, setMaxRecipients] = useState(100);
+  const [maxRecipients, setMaxRecipients] = useState(2000);
   const [instSelecionadas, setInstSelecionadas] = useState<Set<string>>(new Set());
   const [dataHora, setDataHora] = useState("");
   const [recorrente, setRecorrente] = useState(false);
   const [recorrencia, setRecorrencia] = useState<"diario" | "semanal" | "mensal">("semanal");
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
+  const [publicoAlvo, setPublicoAlvo] = useState<"whatsapp" | "leads" | "ambos">("whatsapp");
+  const [recipientsCarregados, setRecipientsCarregados] = useState<string[]>([]);
+  const [carregandoContatos, setCarregandoContatos] = useState(false);
+  const [contatosStatusMsg, setContatosStatusMsg] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset ao abrir
@@ -299,8 +315,10 @@ function NovoAgendamentoModal({
     if (open) {
       setTipo("text"); setTitulo(""); setTexto(""); setBgColor(19); setFont(0);
       setFileUrl(""); setFileBase64(""); setMimetype(""); setLegenda("");
-      setMaxRecipients(100); setInstSelecionadas(new Set()); setDataHora("");
+      setMaxRecipients(2000); setInstSelecionadas(new Set()); setDataHora("");
       setRecorrente(false); setRecorrencia("semanal");
+      setPublicoAlvo("whatsapp"); setRecipientsCarregados([]);
+      setCarregandoContatos(false); setContatosStatusMsg("");
     }
   }, [open]);
 
@@ -322,21 +340,89 @@ function NovoAgendamentoModal({
     reader.readAsDataURL(file);
   };
 
-  const toggleInst = (id: string) =>
-    setInstSelecionadas((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleInst = (id: string) => {
+    setInstSelecionadas((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+    // Se trocou a instância e já tinha contatos carregados, reseta para sincronizar com a nova
+    setRecipientsCarregados([]);
+    setContatosStatusMsg("");
+  };
 
-  const validar = () => {
-    if (!titulo.trim()) { toast.error("Digite um título"); return false; }
+  const carregarContatosWhatsApp = async (instId?: string): Promise<string[]> => {
+    const targetInstId = instId || Array.from(instSelecionadas)[0];
+    const inst = instancias.find((i) => i.id === targetInstId);
+    if (!inst) {
+      toast.error("Selecione ao menos uma instância de WhatsApp");
+      return [];
+    }
+
+    setCarregandoContatos(true);
+    setContatosStatusMsg("Sincronizando contatos da agenda do WhatsApp...");
+    try {
+      const [respBook, respChats] = await Promise.all([
+        supabase.functions.invoke("uazapi-proxy", {
+          body: { action: "get_contacts", payload: { token: inst.token, contactScope: "address_book" } },
+        }),
+        supabase.functions.invoke("uazapi-proxy", {
+          body: { action: "get_contacts", payload: { token: inst.token, contactScope: "chats" } },
+        }),
+      ]);
+
+      const listaBruta: any[] = [
+        ...(Array.isArray(respBook.data) ? respBook.data : []),
+        ...(Array.isArray(respChats.data) ? respChats.data : []),
+      ];
+
+      const setNums = new Set<string>();
+      for (const item of listaBruta) {
+        const jid = String(item?.jid || item?.id || item?.number || "");
+        if (jid.includes("@g.us") || jid.includes("@broadcast")) continue;
+        const raw = jid.split("@")[0].replace(/\D/g, "");
+        if (raw.length >= 8) {
+          const w = formatarNumeroWhatsapp(raw);
+          if (w) setNums.add(w);
+        }
+      }
+
+      const lista = Array.from(setNums);
+      setRecipientsCarregados(lista);
+      setMaxRecipients((prev) => Math.max(prev, lista.length || 100));
+
+      if (lista.length > 0) {
+        setContatosStatusMsg(`✅ ${lista.length} contatos sincronizados da agenda de "${inst.nome}". O story será visível para todos eles!`);
+        toast.success(`${lista.length} contatos encontrados na agenda do WhatsApp!`);
+      } else {
+        setContatosStatusMsg(`Nenhum contato retornado na agenda de "${inst.nome}".`);
+        toast.warning("Nenhum contato retornado na agenda desta instância.");
+      }
+      return lista;
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      setContatosStatusMsg(`Erro ao sincronizar contatos: ${err}`);
+      toast.error(`Erro ao sincronizar: ${err}`);
+      return [];
+    } finally {
+      setCarregandoContatos(false);
+    }
+  };
+
+  const validar = (isTesting = false) => {
+    if (!titulo.trim() && !isTesting) { toast.error("Digite um título"); return false; }
     if (tipo === "text" && !texto.trim()) { toast.error("Digite o texto do story"); return false; }
     if (tipo !== "text" && !fileBase64 && !fileUrl.trim()) { toast.error("Envie um arquivo ou informe uma URL"); return false; }
     if (!instSelecionadas.size) { toast.error("Selecione ao menos uma instância"); return false; }
-    if (!dataHora) { toast.error("Selecione data e hora"); return false; }
-    if (new Date(dataHora) <= new Date()) { toast.error("A data/hora deve ser no futuro"); return false; }
+    if (!isTesting) {
+      if (!dataHora) { toast.error("Selecione data e hora"); return false; }
+      if (new Date(dataHora) <= new Date()) { toast.error("A data/hora deve ser no futuro"); return false; }
+    }
     return true;
   };
 
   const salvar = async () => {
-    if (!validar()) return;
+    if (!validar(false)) return;
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
 
@@ -353,12 +439,16 @@ function NovoAgendamentoModal({
         file_base64: fileBase64 || null,
         mimetype: mimetype || null,
         legenda: legenda.trim() || null,
-        max_recipients: maxRecipients || 100,
+        max_recipients: Math.max(maxRecipients || 2000, recipientsCarregados.length || 100),
         instancias_ids: [...instSelecionadas],
         agendado_para: new Date(dataHora).toISOString(),
         status: "pendente",
         recorrente,
         recorrencia: recorrente ? recorrencia : null,
+        resultado: {
+          publico_alvo: publicoAlvo,
+          recipients: recipientsCarregados,
+        },
       };
       const { error } = await (supabase as any).from("stories_agendamentos").insert(row);
       if (error) throw new Error(error.message);
@@ -372,17 +462,47 @@ function NovoAgendamentoModal({
   };
 
   const testarAgora = async () => {
-    if (!validar()) return;
+    if (!validar(true)) return;
     const inst = instancias.find((i) => instSelecionadas.has(i.id));
     if (!inst) return;
 
     setTestando(true);
     try {
+      let finalRecipients: string[] = [...recipientsCarregados];
+
+      // Se ainda não carregou os contatos e o público envolve whatsapp, busca agora
+      if (finalRecipients.length === 0 && (publicoAlvo === "whatsapp" || publicoAlvo === "ambos")) {
+        finalRecipients = await carregarContatosWhatsApp(inst.id);
+      }
+
+      // Se público envolve leads cadastrados
+      if (publicoAlvo === "leads" || publicoAlvo === "ambos") {
+        const { data: u } = await supabase.auth.getUser();
+        if (u.user) {
+          const { data: leads } = await supabase
+            .from("leads")
+            .select("telefone")
+            .eq("usuario_id", u.user.id);
+          const leadsNums = (leads ?? [])
+            .map((l: any) => formatarNumeroWhatsapp(l.telefone))
+            .filter(Boolean);
+          finalRecipients = Array.from(new Set([...finalRecipients, ...leadsNums]));
+        }
+      }
+
+      const totalDest = finalRecipients.length;
+      const maxRec = Math.max(maxRecipients || 2000, totalDest || 100);
+
       const payload: Record<string, unknown> = {
         token: inst.token,
         type: tipo,
-        max_recipients: maxRecipients,
+        max_recipients: maxRec,
       };
+
+      if (finalRecipients.length > 0) {
+        payload.recipients = finalRecipients;
+      }
+
       if (tipo === "text") {
         payload.text = texto;
         payload.background_color = bgColor;
@@ -398,9 +518,14 @@ function NovoAgendamentoModal({
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-      toast.success(`Story enviado agora para "${inst.nome}" como teste!`);
+
+      if (totalDest > 0) {
+        toast.success(`Story publicado para "${inst.nome}" visível para ${totalDest} contatos!`);
+      } else {
+        toast.success(`Story publicado para "${inst.nome}"!`);
+      }
     } catch (e) {
-      toast.error("Erro no teste: " + (e instanceof Error ? e.message : String(e)));
+      toast.error("Erro no envio: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setTestando(false);
     }
@@ -596,10 +721,105 @@ function NovoAgendamentoModal({
             </p>
           </div>
 
+          {/* Audiência / Visibilidade do Story */}
+          <div className="space-y-3 border rounded-lg p-4 bg-muted/20">
+            <div>
+              <label className="text-sm font-semibold flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-primary" /> Visibilidade do Story (Quem vai ver)
+              </label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Para que o status seja entregue a outras pessoas, o WhatsApp requer a lista de contatos autorizados.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setPublicoAlvo("whatsapp")}
+                className={`flex flex-col items-start p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                  publicoAlvo === "whatsapp"
+                    ? "border-primary bg-primary/10 text-primary font-medium shadow-sm"
+                    : "border-border hover:bg-muted/40 text-muted-foreground"
+                }`}
+              >
+                <span className="flex items-center gap-1.5 font-medium text-foreground">
+                  <Smartphone className="w-3.5 h-3.5 text-primary" /> Agenda do WhatsApp
+                </span>
+                <span className="text-[11px] text-muted-foreground mt-1">
+                  Todos os contatos salvos no WhatsApp do aparelho (Recomendado).
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPublicoAlvo("leads")}
+                className={`flex flex-col items-start p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                  publicoAlvo === "leads"
+                    ? "border-primary bg-primary/10 text-primary font-medium shadow-sm"
+                    : "border-border hover:bg-muted/40 text-muted-foreground"
+                }`}
+              >
+                <span className="flex items-center gap-1.5 font-medium text-foreground">
+                  <Users className="w-3.5 h-3.5 text-primary" /> Leads do Sistema
+                </span>
+                <span className="text-[11px] text-muted-foreground mt-1">
+                  Contatos cadastrados na aba Leads do Chama AI.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPublicoAlvo("ambos")}
+                className={`flex flex-col items-start p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                  publicoAlvo === "ambos"
+                    ? "border-primary bg-primary/10 text-primary font-medium shadow-sm"
+                    : "border-border hover:bg-muted/40 text-muted-foreground"
+                }`}
+              >
+                <span className="flex items-center gap-1.5 font-medium text-foreground">
+                  <Globe className="w-3.5 h-3.5 text-primary" /> Ambos
+                </span>
+                <span className="text-[11px] text-muted-foreground mt-1">
+                  Junta agenda do WhatsApp + leads do sistema.
+                </span>
+              </button>
+            </div>
+
+            {(publicoAlvo === "whatsapp" || publicoAlvo === "ambos") && (
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => carregarContatosWhatsApp()}
+                  disabled={carregandoContatos || instSelecionadas.size === 0}
+                  className="gap-2 shrink-0 h-8 text-xs border-primary/40 text-primary hover:bg-primary/5 font-medium"
+                >
+                  {carregandoContatos ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Smartphone className="w-3.5 h-3.5" />
+                  )}
+                  {recipientsCarregados.length > 0 ? "Recarregar contatos do WhatsApp" : "Carregar contatos da agenda agora"}
+                </Button>
+
+                {contatosStatusMsg ? (
+                  <p className="text-xs text-muted-foreground font-medium">
+                    {contatosStatusMsg}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Clique acima para sincronizar ou enviaremos automaticamente no momento do disparo.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Data e hora */}
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Data e hora de envio</label>
+              <label className="text-sm font-medium">Data e hora de envio (para agendamento)</label>
               <Input
                 type="datetime-local"
                 value={dataHora}
@@ -612,11 +832,11 @@ function NovoAgendamentoModal({
               <Input
                 type="number"
                 min={1}
-                max={5000}
+                max={10000}
                 value={maxRecipients}
                 onChange={(e) => setMaxRecipients(Number(e.target.value))}
               />
-              <p className="text-xs text-muted-foreground">Limite de contatos da agenda que verão o story. Recomendado: 100.</p>
+              <p className="text-xs text-muted-foreground">Limite máximo de contatos que verão o story. Padrão: 2.000.</p>
             </div>
           </div>
 
@@ -660,15 +880,16 @@ function NovoAgendamentoModal({
         </div>
 
         <DialogFooter className="gap-2 flex-wrap">
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button
             variant="outline"
             onClick={testarAgora}
             disabled={testando || salvando}
-            className="gap-2"
+            className="gap-2 border-primary/40 text-primary hover:bg-primary/5"
+            title="Publica imediatamente no WhatsApp para todos os contatos carregados"
           >
             {testando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Testar agora
+            Publicar agora
           </Button>
           <Button onClick={salvar} disabled={salvando || testando} className="gap-2">
             {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
