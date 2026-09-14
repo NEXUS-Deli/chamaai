@@ -608,7 +608,7 @@ function extractLeadRow(r: Record<string, any>) {
 
 function parsePastedText(text: string) {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const result: { telefone: string; nome: string | null; empresa: string | null }[] = [];
+  const result: { telefone: string; nome: string | null; empresa: string | null; tags: string[] }[] = [];
 
   for (const line of lines) {
     const parts = line.split(/[,;\t|]/).map((p) => p.trim()).filter(Boolean);
@@ -617,6 +617,7 @@ function parsePastedText(text: string) {
     let tel = "";
     let nome: string | null = null;
     let empresa: string | null = null;
+    const tags: string[] = [];
 
     if (parts.length === 1) {
       tel = normalizePhone(parts[0]);
@@ -627,15 +628,17 @@ function parsePastedText(text: string) {
         const other = parts.filter((_, idx) => idx !== telIdx);
         if (other[0]) nome = other[0];
         if (other[1]) empresa = other[1];
+        if (other[2]) tags.push(other[2].toLowerCase());
       } else {
         tel = normalizePhone(parts[0]);
         if (parts[1]) nome = parts[1];
         if (parts[2]) empresa = parts[2];
+        if (parts[3]) tags.push(parts[3].toLowerCase());
       }
     }
 
-    if (tel) {
-      result.push({ telefone: tel, nome, empresa });
+    if (tel && isValidPhone(tel)) {
+      result.push({ telefone: tel, nome, empresa, tags });
     }
   }
 
@@ -690,7 +693,7 @@ function ImportModal({ open, onClose, pastas, onDone }: { open: boolean; onClose
         telefone: string;
         nome: string | null;
         empresa: string | null;
-        tags?: string[] | null;
+        tags: string[];
       }> = [];
 
       let invalidCount = 0;
@@ -708,7 +711,7 @@ function ImportModal({ open, onClose, pastas, onDone }: { open: boolean; onClose
           telefone: item.telefone,
           nome: item.nome || null,
           empresa: item.empresa || null,
-          tags: item.tags || null,
+          tags: Array.isArray(item.tags) && item.tags.length > 0 ? item.tags : [],
         });
       }
 
@@ -718,16 +721,16 @@ function ImportModal({ open, onClose, pastas, onDone }: { open: boolean; onClose
         return;
       }
 
-      // Inserção em lotes de 200
+      // Inserção com upsert em lotes de 200 para evitar erro de duplicata e conflito de chave única
       const BATCH_SIZE = 200;
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const chunk = rows.slice(i, i + BATCH_SIZE);
-        const { error } = await supabase.from("leads").insert(chunk);
+        const { error } = await supabase.from("leads").upsert(chunk, { onConflict: "usuario_id,telefone" });
         if (error) throw error;
       }
 
       const msg = invalidCount > 0
-        ? `${rows.length} contatos importados (${invalidCount} números inválidos ignorados)`
+        ? `${rows.length} contatos importados (${invalidCount} linhas ignoradas)`
         : `${rows.length} contatos importados com sucesso!`;
       toast.success(msg);
 
@@ -824,14 +827,15 @@ function AddModal({ open, onClose, pastas, onDone, pastaAtual }: { open: boolean
     }
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
-    const { error } = await supabase.from("leads").insert({
+    const { error } = await supabase.from("leads").upsert({
       usuario_id: u.user.id,
       pasta_id: form.pasta_id || null,
       telefone: cleanTel,
       nome: form.nome.trim() || null,
       empresa: form.empresa.trim() || null,
       notas: form.notas.trim() || null,
-    });
+      tags: [],
+    }, { onConflict: "usuario_id,telefone" });
     if (error) return toast.error(error.message);
     toast.success("Contato adicionado");
     onDone();
