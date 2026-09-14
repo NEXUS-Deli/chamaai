@@ -5,6 +5,53 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const UAZAPI_BASE_URL = Deno.env.get("UAZAPI_BASE_URL") || "https://nexus-360.uazapi.com"
 
+// Formato "número WhatsApp" pedido pela doc do /send/status (ex: "5511999999999",
+// SEMPRE com o código do país "55" — diferente do formatarTelefone usado em
+// disparo-cron, que remove o "55" pra outro fluxo/endpoint).
+function paraNumeroWhatsapp(phone: string): string {
+  let digits = phone.replace(/\D/g, '')
+  if (!digits.startsWith('55')) digits = '55' + digits
+  const local = digits.slice(2)
+  const ddd = local.slice(0, 2)
+  let numero = local.slice(2)
+  if (numero.length === 8 && ['6', '7', '8', '9'].includes(numero[0])) numero = '9' + numero
+  if (numero.length > 9) numero = numero.slice(-9)
+  return `55${ddd}${numero}`
+}
+
+// Busca todos os leads do usuário (paginado — PostgREST limita 1000 linhas
+// por chamada) e devolve os números únicos, prontos pra virar "recipients" do
+// story. A sessão da API não usa a agenda nativa do WhatsApp do celular
+// conectado pra decidir quem vê o status — precisa receber a lista explícita.
+// Não corta pelo limite aqui: manda a lista inteira e deixa o "max_recipients"
+// (enviado junto) fazer o corte determinístico do lado da uazapi, como a doc
+// recomenda pro modo "envio parcial" combinado com "envio explícito".
+async function buscarDestinatarios(
+  supabase: ReturnType<typeof createClient>,
+  usuarioId: string,
+): Promise<string[]> {
+  const BATCH = 1000
+  let from = 0
+  const telefones = new Set<string>()
+
+  while (true) {
+    const { data } = await supabase
+      .from("leads")
+      .select("telefone")
+      .eq("usuario_id", usuarioId)
+      .range(from, from + BATCH - 1)
+
+    const batch = (data ?? []) as { telefone: string }[]
+    for (const l of batch) {
+      if (l.telefone) telefones.add(paraNumeroWhatsapp(l.telefone))
+    }
+    if (batch.length < BATCH) break
+    from += BATCH
+  }
+
+  return Array.from(telefones)
+}
+
 serve(async () => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
@@ -72,6 +119,14 @@ serve(async () => {
 
     if (ag.max_recipients) payloadBase.max_recipients = ag.max_recipients
 
+    // Lista explícita de destinatários (todos os leads salvos do usuário) —
+    // sem isso o story não tem audiência, já que a sessão da API não usa a
+    // agenda nativa do WhatsApp do celular conectado. Manda a lista inteira;
+    // "max_recipients" acima já faz o corte determinístico do lado da uazapi.
+    const recipients = await buscarDestinatarios(supabase, ag.usuario_id)
+    if (recipients.length > 0) payloadBase.recipients = recipients
+    console.log(`[stories-cron] ${recipients.length} destinatário(s) para o agendamento ${ag.id}`)
+
     // Envia para cada instância selecionada
     for (const inst of instancias) {
       try {
@@ -86,15 +141,19 @@ serve(async () => {
         })
 
         const respData = await resp.json().catch(() => ({}))
+        // Guarda o debug da uazapi (contagens, motivos de descarte por
+        // recipient, etc.) no resultado — essencial pra diagnosticar se a
+        // audiência veio vazia/parcial mesmo com resp.ok.
+        const debugInfo = (respData as Record<string, unknown>)?.debug
 
         if (!resp.ok) {
           const msg = (respData as Record<string, string>)?.error || `HTTP ${resp.status}`
-          console.error(`[stories-cron] Erro na instância ${inst.nome}: ${msg}`)
-          resultados.push({ instancia: inst.nome, ok: false, erro: msg })
+          console.error(`[stories-cron] Erro na instância ${inst.nome}: ${msg}`, debugInfo ?? "")
+          resultados.push({ instancia: inst.nome, ok: false, erro: msg, debug: debugInfo })
           totalErros++
         } else {
-          console.log(`[stories-cron] OK: ${inst.nome}`)
-          resultados.push({ instancia: inst.nome, ok: true })
+          console.log(`[stories-cron] OK: ${inst.nome}`, debugInfo ?? "")
+          resultados.push({ instancia: inst.nome, ok: true, debug: debugInfo })
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)

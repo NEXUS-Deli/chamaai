@@ -1,4 +1,4 @@
-const BASE_URL = process.env.UAZAPI_BASE_URL ?? 'https://nexus-360.uazapi.com';
+const BASE_URL = process.env.UAZAPI_BASE_URL ?? 'https://conectanegocios.uazapi.com';
 
 export interface VerificacaoWpp {
   isInWhatsapp: boolean;

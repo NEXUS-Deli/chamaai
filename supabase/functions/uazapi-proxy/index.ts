@@ -14,7 +14,7 @@ serve(async (req) => {
   try {
     const { action, payload } = await req.json()
 
-    const UAZAPI_BASE_URL = Deno.env.get('UAZAPI_BASE_URL') || "https://nexus-360.uazapi.com"
+    const UAZAPI_BASE_URL = Deno.env.get('UAZAPI_BASE_URL') || "https://conectanegocios.uazapi.com"
     const UAZAPI_ADMIN_TOKEN = Deno.env.get('UAZAPI_ADMIN_TOKEN')
 
     if (!UAZAPI_ADMIN_TOKEN) {

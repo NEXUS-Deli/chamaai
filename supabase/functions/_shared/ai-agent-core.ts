@@ -236,21 +236,23 @@ export async function claimBuffer(
   numero: string,
   token: string,
 ): Promise<BufferItem[] | null> {
-  const { data, error } = await supabase
-    .from('ai_buffer')
-    .update({ mensagens: [], lock_token: null })
-    .eq('instancia_id', instanciaId)
-    .eq('numero', numero)
-    .eq('lock_token', token)
-    .select('mensagens')
-    .maybeSingle()
+  // Via RPC (não .update().select() direto): UPDATE...RETURNING sempre
+  // devolve o valor DEPOIS da alteração — como aqui "mensagens" é zerado na
+  // mesma instrução, .update().select() sempre devolveria array vazio. A
+  // função ai_buffer_claim captura o valor de antes via CTE (ver migration
+  // 20260722_ai_buffer_claim_fix.sql).
+  const { data, error } = await supabase.rpc('ai_buffer_claim', {
+    p_instancia_id: instanciaId,
+    p_numero: numero,
+    p_token: token,
+  })
 
   if (error) {
     console.error('[ai-agent-core] claimBuffer error:', error)
     return null
   }
-  if (!data) return null
-  return (data.mensagens ?? []) as BufferItem[]
+  if (data === null) return null
+  return (data ?? []) as BufferItem[]
 }
 
 // ── Resolução de itens do buffer (texto / áudio transcrito / imagem) ───────
