@@ -11,6 +11,13 @@ export function parseCSV(file: File): Promise<ParsedCSV> {
     Papa.parse<Record<string, string>>(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (header) =>
+        header
+          .trim()
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/^[^a-z0-9_]+/, ""),
       complete: (res) => {
         resolve({ headers: res.meta.fields ?? [], rows: res.data });
       },

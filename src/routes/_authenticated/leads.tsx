@@ -8,8 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Folder, FolderInput, Plus, Trash2, Upload, Download, UserPlus, Search, X, CheckSquare, Tag, History, Loader2 } from "lucide-react";
-import { isValidPhone, formatPhoneBR } from "@/lib/phone";
+import { isValidPhone, formatPhoneBR, normalizePhone } from "@/lib/phone";
 import { parseCSV, downloadCSV, templateLeadsCSV } from "@/lib/csv";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 
 export const Route = createFileRoute("/_authenticated/leads")({
   component: LeadsPage,
@@ -572,8 +574,78 @@ function MoverPastaModal({
   );
 }
 
+function extractLeadRow(r: Record<string, any>) {
+  const getVal = (keys: string[]) => {
+    for (const k of keys) {
+      if (r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== "") {
+        return String(r[k]).trim();
+      }
+    }
+    const allKeys = Object.keys(r);
+    for (const ak of allKeys) {
+      const clean = ak.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      for (const k of keys) {
+        if (clean === k) {
+          const v = r[ak];
+          if (v !== undefined && v !== null && String(v).trim() !== "") {
+            return String(v).trim();
+          }
+        }
+      }
+    }
+    return "";
+  };
+
+  const rawTel = getVal(["telefone", "celular", "whatsapp", "phone", "fone", "numero", "contato", "mobile", "tel"]) || (Object.values(r)[0] ? String(Object.values(r)[0]).trim() : "");
+  const tel = normalizePhone(rawTel);
+  const nome = getVal(["nome", "name", "cliente", "lead"]) || null;
+  const empresa = getVal(["empresa", "company", "organizacao", "negocio"]) || null;
+  const tagsStr = getVal(["tags", "tag", "categoria"]);
+  const tags = tagsStr ? tagsStr.split(/[;,]/).map((t) => t.trim().toLowerCase()).filter(Boolean) : null;
+
+  return { telefone: tel, nome, empresa, tags };
+}
+
+function parsePastedText(text: string) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const result: { telefone: string; nome: string | null; empresa: string | null }[] = [];
+
+  for (const line of lines) {
+    const parts = line.split(/[,;\t|]/).map((p) => p.trim()).filter(Boolean);
+    if (!parts.length) continue;
+
+    let tel = "";
+    let nome: string | null = null;
+    let empresa: string | null = null;
+
+    if (parts.length === 1) {
+      tel = normalizePhone(parts[0]);
+    } else {
+      const telIdx = parts.findIndex((p) => isValidPhone(normalizePhone(p)));
+      if (telIdx !== -1) {
+        tel = normalizePhone(parts[telIdx]);
+        const other = parts.filter((_, idx) => idx !== telIdx);
+        if (other[0]) nome = other[0];
+        if (other[1]) empresa = other[1];
+      } else {
+        tel = normalizePhone(parts[0]);
+        if (parts[1]) nome = parts[1];
+        if (parts[2]) empresa = parts[2];
+      }
+    }
+
+    if (tel) {
+      result.push({ telefone: tel, nome, empresa });
+    }
+  }
+
+  return result;
+}
+
 function ImportModal({ open, onClose, pastas, onDone }: { open: boolean; onClose: () => void; pastas: Pasta[]; onDone: () => void }) {
+  const [tab, setTab] = useState<"csv" | "texto">("csv");
   const [file, setFile] = useState<File | null>(null);
+  const [pastedText, setPastedText] = useState("");
   const [pastaId, setPastaId] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
@@ -586,51 +658,152 @@ function ImportModal({ open, onClose, pastas, onDone }: { open: boolean; onClose
   };
 
   const importar = async () => {
-    if (!file) return toast.error("Selecione um arquivo");
     setLoading(true);
     try {
-      const parsed = await parseCSV(file);
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
-      const rows = parsed.rows
-        .filter((r) => r.telefone)
-        .map((r) => ({
-          usuario_id: u.user!.id,
+
+      let rawItems: { telefone: string; nome: string | null; empresa: string | null; tags?: string[] | null }[] = [];
+
+      if (tab === "csv") {
+        if (!file) {
+          toast.error("Selecione um arquivo CSV");
+          setLoading(false);
+          return;
+        }
+        const parsed = await parseCSV(file);
+        rawItems = parsed.rows.map(extractLeadRow);
+      } else {
+        if (!pastedText.trim()) {
+          toast.error("Cole ao menos um número de telefone");
+          setLoading(false);
+          return;
+        }
+        rawItems = parsePastedText(pastedText);
+      }
+
+      // Filtra válidos e desduplica por telefone
+      const seen = new Set<string>();
+      const rows: Array<{
+        usuario_id: string;
+        pasta_id: string | null;
+        telefone: string;
+        nome: string | null;
+        empresa: string | null;
+        tags?: string[] | null;
+      }> = [];
+
+      let invalidCount = 0;
+      for (const item of rawItems) {
+        if (!isValidPhone(item.telefone)) {
+          invalidCount++;
+          continue;
+        }
+        if (seen.has(item.telefone)) continue;
+        seen.add(item.telefone);
+
+        rows.push({
+          usuario_id: u.user.id,
           pasta_id: pastaId || null,
-          telefone: String(r.telefone).trim(),
-          nome: r.nome ?? null,
-          empresa: r.empresa ?? null,
-        }));
-      if (!rows.length) { toast.error("Nenhum telefone válido"); setLoading(false); return; }
-      const { error } = await supabase.from("leads").insert(rows);
-      if (error) throw error;
-      toast.success(`${rows.length} contatos importados`);
-      onDone(); onClose(); setFile(null);
+          telefone: item.telefone,
+          nome: item.nome || null,
+          empresa: item.empresa || null,
+          tags: item.tags || null,
+        });
+      }
+
+      if (!rows.length) {
+        toast.error("Nenhum número de telefone válido encontrado");
+        setLoading(false);
+        return;
+      }
+
+      // Inserção em lotes de 200
+      const BATCH_SIZE = 200;
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const chunk = rows.slice(i, i + BATCH_SIZE);
+        const { error } = await supabase.from("leads").insert(chunk);
+        if (error) throw error;
+      }
+
+      const msg = invalidCount > 0
+        ? `${rows.length} contatos importados (${invalidCount} números inválidos ignorados)`
+        : `${rows.length} contatos importados com sucesso!`;
+      toast.success(msg);
+
+      onDone();
+      onClose();
+      setFile(null);
+      setPastedText("");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao importar");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Importar contatos via CSV</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Importar contatos</DialogTitle>
+        </DialogHeader>
+
         <div className="space-y-4">
-          <Button variant="outline" size="sm" onClick={baixarTemplate}>Baixar modelo CSV</Button>
-          <Input type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <Tabs value={tab} onValueChange={(v) => setTab(v as "csv" | "texto")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="csv">Arquivo CSV</TabsTrigger>
+              <TabsTrigger value="texto">Colar Lista</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="csv" className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">Formatos aceitos: .csv</p>
+                <Button variant="outline" size="sm" onClick={baixarTemplate} className="h-7 text-xs">
+                  Baixar modelo CSV
+                </Button>
+              </div>
+              <Input type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            </TabsContent>
+
+            <TabsContent value="texto" className="space-y-3 pt-2">
+              <p className="text-xs text-muted-foreground">
+                Cole os números (um por linha). Formato: <code>telefone</code> ou <code>telefone, nome, empresa</code>
+              </p>
+              <Textarea
+                placeholder={"11999998888\n11988887777, Maria Silva\n11977776666, João, Conecta"}
+                rows={6}
+                value={pastedText}
+                onChange={(e) => setPastedText(e.target.value)}
+                className="font-mono text-xs"
+              />
+            </TabsContent>
+          </Tabs>
+
           <div className="space-y-2">
             <Label>Importar para a pasta</Label>
             <Select value={pastaId} onValueChange={setPastaId}>
-              <SelectTrigger><SelectValue placeholder="Sem pasta" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Sem pasta" />
+              </SelectTrigger>
               <SelectContent>
-                {pastas.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                {pastas.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.nome}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
+
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button onClick={importar} disabled={loading}>Importar</Button>
+          <Button variant="ghost" onClick={onClose} disabled={loading}>
+            Cancelar
+          </Button>
+          <Button onClick={importar} disabled={loading}>
+            {loading ? "Importando..." : "Importar contatos"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -640,48 +813,74 @@ function ImportModal({ open, onClose, pastas, onDone }: { open: boolean; onClose
 function AddModal({ open, onClose, pastas, onDone, pastaAtual }: { open: boolean; onClose: () => void; pastas: Pasta[]; onDone: () => void; pastaAtual: string | null }) {
   const [form, setForm] = useState({ telefone: "", nome: "", empresa: "", notas: "", pasta_id: "" });
 
-  useEffect(() => { if (open) setForm({ telefone: "", nome: "", empresa: "", notas: "", pasta_id: pastaAtual ?? "" }); }, [open, pastaAtual]);
+  useEffect(() => {
+    if (open) setForm({ telefone: "", nome: "", empresa: "", notas: "", pasta_id: pastaAtual ?? "" });
+  }, [open, pastaAtual]);
 
   const salvar = async () => {
-    if (!isValidPhone(form.telefone)) return toast.error("Telefone inválido");
+    const cleanTel = normalizePhone(form.telefone);
+    if (!isValidPhone(cleanTel)) {
+      return toast.error("Telefone inválido. Digite DDD + número (ex: 11999998888)");
+    }
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
     const { error } = await supabase.from("leads").insert({
       usuario_id: u.user.id,
       pasta_id: form.pasta_id || null,
-      telefone: form.telefone,
-      nome: form.nome || null,
-      empresa: form.empresa || null,
-      notas: form.notas || null,
+      telefone: cleanTel,
+      nome: form.nome.trim() || null,
+      empresa: form.empresa.trim() || null,
+      notas: form.notas.trim() || null,
     });
     if (error) return toast.error(error.message);
     toast.success("Contato adicionado");
-    onDone(); onClose();
+    onDone();
+    onClose();
   };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
-        <DialogHeader><DialogTitle>Adicionar contato</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Adicionar contato</DialogTitle>
+        </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-2">
             <Label>Telefone *</Label>
-            <Input value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} placeholder="+5511912345678" />
+            <Input
+              value={form.telefone}
+              onChange={(e) => setForm({ ...form, telefone: e.target.value })}
+              placeholder="(11) 99999-9999 ou 11999999999"
+            />
           </div>
-          <div className="space-y-2"><Label>Nome</Label><Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
-          <div className="space-y-2"><Label>Empresa</Label><Input value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })} /></div>
+          <div className="space-y-2">
+            <Label>Nome</Label>
+            <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <Label>Empresa</Label>
+            <Input value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })} />
+          </div>
           <div className="space-y-2">
             <Label>Pasta</Label>
             <Select value={form.pasta_id} onValueChange={(v) => setForm({ ...form, pasta_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Sem pasta" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Sem pasta" />
+              </SelectTrigger>
               <SelectContent>
-                {pastas.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                {pastas.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.nome}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
           <Button onClick={salvar}>Salvar</Button>
         </DialogFooter>
       </DialogContent>

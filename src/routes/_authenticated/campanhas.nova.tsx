@@ -199,16 +199,40 @@ function NovaCampanha() {
   };
 
   const handleCSV = async (file: File) => {
-    const parsed = await parseCSV(file);
-    const cs = parsed.rows
-      .filter((r) => r.telefone && isValidPhone(String(r.telefone)))
-      .map((r) => ({
-        telefone: toE164BR(String(r.telefone)),
-        nome: String(r.nome ?? ""),
-        empresa: String(r.empresa ?? ""),
-      }));
-    setContatosCSV(cs);
-    toast.success(`${cs.length} contatos válidos`);
+    try {
+      const parsed = await parseCSV(file);
+      const getVal = (r: Record<string, any>, keys: string[]) => {
+        for (const k of keys) {
+          if (r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== "") {
+            return String(r[k]).trim();
+          }
+        }
+        return "";
+      };
+
+      const cs = parsed.rows
+        .map((r) => {
+          const rawTel = getVal(r, ["telefone", "celular", "whatsapp", "phone", "fone", "numero", "contato", "mobile", "tel"]) || (Object.values(r)[0] ? String(Object.values(r)[0]).trim() : "");
+          const nome = getVal(r, ["nome", "name", "cliente", "lead"]) || String(r.nome ?? "");
+          const empresa = getVal(r, ["empresa", "company", "organizacao", "negocio"]) || String(r.empresa ?? "");
+          return { telefone: rawTel, nome, empresa };
+        })
+        .filter((r) => r.telefone && isValidPhone(r.telefone))
+        .map((r) => ({
+          telefone: toE164BR(r.telefone),
+          nome: r.nome,
+          empresa: r.empresa,
+        }));
+
+      setContatosCSV(cs);
+      if (cs.length === 0) {
+        toast.error("Nenhum contato com telefone válido encontrado no CSV");
+      } else {
+        toast.success(`${cs.length} contatos válidos`);
+      }
+    } catch (e) {
+      toast.error("Erro ao processar arquivo CSV");
+    }
   };
 
   // Quando o filtro está ativo ou a lista de leads muda, consulta quais já foram contactados
