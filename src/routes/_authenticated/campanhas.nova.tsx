@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
+import { format, isSameDay } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import {
   Loader2, ChevronRight, UploadCloud, X, Plus, Trash2, FileText, Layers, Check,
@@ -123,7 +126,12 @@ function NovaCampanha() {
 
   const [pastas, setPastas] = useState<{ id: string; nome: string }[]>([]);
   const [pastasSel, setPastasSel] = useState<string[]>([]);
-  const [leadsDaPasta, setLeadsDaPasta] = useState<(Contato & { id: string })[]>([]);
+
+  const [tipoAgendamento, setTipoAgendamento] = useState<"unico" | "massa">("unico");
+  const [datasMassa, setDatasMassa] = useState<Date[]>([]);
+  const [configsMassa, setConfigsMassa] = useState<Record<string, { horarioInicio: string; horarioFim: string; pastas: string[] }>>({});
+
+  const [leadsDaPasta, setLeadsDaPasta] = useState<(Contato & { id: string, pasta_id?: string })[]>([]);
   const [leadsSel, setLeadsSel] = useState<string[]>([]);
   const leadsSelSet = useMemo(() => new Set(leadsSel), [leadsSel]);
 
@@ -161,12 +169,12 @@ function NovaCampanha() {
 
       // Busca em lotes para superar o limite de 1000 linhas do PostgREST
       const BATCH = 1000;
-      let all: { id: string; telefone: string; nome: string | null; empresa: string | null }[] = [];
+      let all: { id: string; telefone: string; nome: string | null; empresa: string | null; pasta_id: string | null }[] = [];
       let from = 0;
       while (true) {
         const { data } = await supabase
           .from("leads")
-          .select("id, telefone, nome, empresa")
+          .select("id, telefone, nome, empresa, pasta_id")
           .eq("usuario_id", u.user.id)
           .in("pasta_id", pastasSel)
           .range(from, from + BATCH - 1);
@@ -178,7 +186,7 @@ function NovaCampanha() {
 
       const validos = all
         .filter((l) => isValidPhone(l.telefone))
-        .map((l) => ({ id: l.id, telefone: toE164BR(l.telefone), nome: l.nome ?? "", empresa: l.empresa ?? "" }));
+        .map((l) => ({ id: l.id, telefone: toE164BR(l.telefone), nome: l.nome ?? "", empresa: l.empresa ?? "", pasta_id: l.pasta_id ?? undefined }));
 
       setLeadsDaPasta(validos);
       setLeadsSel(validos.map((l) => l.telefone));
@@ -359,9 +367,7 @@ function NovaCampanha() {
     try {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
-      const contatos = getContatos();
-      if (!contatos.length) { toast.error("Nenhum contato válido selecionado"); return; }
-
+      
       const instsSelecionadas = instancias
         .filter((i) => instanciasSelecionadas.includes(i.id))
         .map((i) => ({ id: i.id, nome: i.nome, token: i.token ?? "" }));
@@ -370,48 +376,120 @@ function NovaCampanha() {
       const midiasVariacoes = await uploadMidias();
       const primeiraMidia = midiasVariacoes[0] ?? null;
 
-      const { data: camp, error } = await (supabase as any)
-        .from("campanhas")
-        .insert({
-          usuario_id: u.user.id,
-          nome,
-          mensagem: mensagem || (mensagensVariacoes[0] ?? ""),
-          mensagens_variacoes: mensagensVariacoes.filter(Boolean) as unknown as import("@/integrations/supabase/types").Json,
-          midias_variacoes: midiasVariacoes as unknown as import("@/integrations/supabase/types").Json,
-          instancias_selecionadas: instsSelecionadas as unknown as import("@/integrations/supabase/types").Json,
-          instancia_whatsapp: primeiraInstancia?.id ?? null,
-          instancia_nome: primeiraInstancia?.nome ?? "",
-          instancia_token: primeiraInstancia?.token ?? "",
-          delay_minimo: delayMinimo,
-          delay_maximo: delayMaximo,
-          delay_mensagens: delayMensagens,
-          delay_segundos: delayMinimo,
-          horario_inicio: horarioInicio,
-          horario_fim: horarioFim,
-          midia_url: primeiraMidia?.url ?? null,
-          midia_nome: primeiraMidia?.nome ?? null,
-          midia_tipo: primeiraMidia?.tipo ?? null,
-          midia_path: null,
-          midia_bucket: primeiraMidia ? "midias" : null,
-          total_contatos: contatos.length,
-          status: agendarPara ? "agendada" : "em_andamento",
-          agendada_para: formatarDataParaBRT(agendarPara),
-          recorrente: origem === "lista" && recorrente,
-          recorrencia_intervalo_dias: origem === "lista" && recorrente ? recorrenciaIntervaloDias : null,
-          recorrencia_dias_excluidos: origem === "lista" && recorrente ? recorrenciaDiasExcluidos : [],
-          pasta_ids: origem === "lista" && recorrente ? pastasSel : null,
-        })
-        .select()
-        .single();
+      if (tipoAgendamento === "unico") {
+        const contatos = getContatos();
+        if (!contatos.length) { toast.error("Nenhum contato válido selecionado"); return; }
+        
+        const { data: camp, error } = await (supabase as any)
+          .from("campanhas")
+          .insert({
+            usuario_id: u.user.id,
+            nome,
+            mensagem: mensagem || (mensagensVariacoes[0] ?? ""),
+            mensagens_variacoes: mensagensVariacoes.filter(Boolean) as unknown as import("@/integrations/supabase/types").Json,
+            midias_variacoes: midiasVariacoes as unknown as import("@/integrations/supabase/types").Json,
+            instancias_selecionadas: instsSelecionadas as unknown as import("@/integrations/supabase/types").Json,
+            instancia_whatsapp: primeiraInstancia?.id ?? null,
+            instancia_nome: primeiraInstancia?.nome ?? "",
+            instancia_token: primeiraInstancia?.token ?? "",
+            delay_minimo: delayMinimo,
+            delay_maximo: delayMaximo,
+            delay_mensagens: delayMensagens,
+            delay_segundos: delayMinimo,
+            horario_inicio: horarioInicio,
+            horario_fim: horarioFim,
+            midia_url: primeiraMidia?.url ?? null,
+            midia_nome: primeiraMidia?.nome ?? null,
+            midia_tipo: primeiraMidia?.tipo ?? null,
+            midia_path: null,
+            midia_bucket: primeiraMidia ? "midias" : null,
+            total_contatos: contatos.length,
+            status: agendarPara ? "agendada" : "em_andamento",
+            agendada_para: formatarDataParaBRT(agendarPara),
+            recorrente: origem === "lista" && recorrente,
+            recorrencia_intervalo_dias: origem === "lista" && recorrente ? recorrenciaIntervaloDias : null,
+            recorrencia_dias_excluidos: origem === "lista" && recorrente ? recorrenciaDiasExcluidos : [],
+            pasta_ids: origem === "lista" && recorrente ? pastasSel : null,
+          })
+          .select()
+          .single();
 
-      if (error || !camp) { toast.error(error?.message ?? "Erro ao criar campanha"); return; }
+        if (error || !camp) { toast.error(error?.message ?? "Erro ao criar campanha"); return; }
 
-      await supabase.from("contatos_campanha").insert(
-        contatos.map((c) => ({ campanha_id: camp.id, telefone: c.telefone, nome: c.nome, empresa: c.empresa })),
-      );
+        await supabase.from("contatos_campanha").insert(
+          contatos.map((c) => ({ campanha_id: camp.id, telefone: c.telefone, nome: c.nome, empresa: c.empresa })),
+        );
+        toast.success("Campanha criada com sucesso!");
+        navigate({ to: "/campanhas/$id", params: { id: camp.id } });
+      } else {
+        // Envio em Massa
+        if (datasMassa.length === 0) { toast.error("Selecione as datas para o agendamento em massa"); return; }
+        
+        let criadas = 0;
+        const contatosBase = getContatos();
+        
+        for (const date of datasMassa) {
+          const dateStr = format(date, "yyyy-MM-dd");
+          const config = configsMassa[dateStr];
+          if (!config || config.pastas.length === 0) continue;
+          
+          const leadsDesteDia = contatosBase.filter((c: any) => {
+            const l = leadsDaPasta.find(x => x.telefone === c.telefone);
+            return l && l.pasta_id && config.pastas.includes(l.pasta_id);
+          });
+          
+          if (leadsDesteDia.length === 0) continue;
+          
+          const nomeMassa = `${nome} - ${format(date, "dd/MM/yyyy")}`;
+          const agendamentoStr = `${dateStr}T${config.horarioInicio}`;
+          
+          const { data: camp, error } = await (supabase as any)
+            .from("campanhas")
+            .insert({
+              usuario_id: u.user.id,
+              nome: nomeMassa,
+              mensagem: mensagem || (mensagensVariacoes[0] ?? ""),
+              mensagens_variacoes: mensagensVariacoes.filter(Boolean) as unknown as import("@/integrations/supabase/types").Json,
+              midias_variacoes: midiasVariacoes as unknown as import("@/integrations/supabase/types").Json,
+              instancias_selecionadas: instsSelecionadas as unknown as import("@/integrations/supabase/types").Json,
+              instancia_whatsapp: primeiraInstancia?.id ?? null,
+              instancia_nome: primeiraInstancia?.nome ?? "",
+              instancia_token: primeiraInstancia?.token ?? "",
+              delay_minimo: delayMinimo,
+              delay_maximo: delayMaximo,
+              delay_mensagens: delayMensagens,
+              delay_segundos: delayMinimo,
+              horario_inicio: config.horarioInicio,
+              horario_fim: config.horarioFim,
+              midia_url: primeiraMidia?.url ?? null,
+              midia_nome: primeiraMidia?.nome ?? null,
+              midia_tipo: primeiraMidia?.tipo ?? null,
+              midia_path: null,
+              midia_bucket: primeiraMidia ? "midias" : null,
+              total_contatos: leadsDesteDia.length,
+              status: "agendada",
+              agendada_para: formatarDataParaBRT(agendamentoStr),
+              recorrente: false,
+              pasta_ids: config.pastas,
+            })
+            .select()
+            .single();
 
-      toast.success("Campanha criada com sucesso!");
-      navigate({ to: "/campanhas/$id", params: { id: camp.id } });
+          if (error || !camp) { toast.error(error?.message ?? "Erro ao criar campanha em massa"); continue; }
+
+          await supabase.from("contatos_campanha").insert(
+            leadsDesteDia.map((c) => ({ campanha_id: camp.id, telefone: c.telefone, nome: c.nome, empresa: c.empresa })),
+          );
+          criadas++;
+        }
+        
+        if (criadas > 0) {
+          toast.success(`${criadas} campanhas agendadas com sucesso!`);
+          navigate({ to: "/campanhas" });
+        } else {
+          toast.error("Nenhuma campanha foi criada. Verifique as configurações (datas, horários e pastas selecionadas).");
+        }
+      }
     } finally { setLoading(false); }
   };
 
@@ -842,12 +920,137 @@ function NovaCampanha() {
                   </div>
                 )}
               </div>
-              <div className="space-y-2">
-                <Label className="text-muted-foreground">Agendar para (opcional)</Label>
-                <Input type="datetime-local" value={agendarPara} onChange={(e) => setAgendarPara(e.target.value)} />
-              </div>
+              {tipoAgendamento === "unico" && (<div className="space-y-2"><Label className="text-muted-foreground">Agendar para (opcional)</Label><Input type="datetime-local" value={agendarPara} onChange={(e) => setAgendarPara(e.target.value)} /></div>)}
 
-              {origem === "lista" ? (
+              {origem === "lista" && (
+                <div className="space-y-4 border rounded-lg p-4 bg-muted/10 mt-4">
+                  <Label className="text-base font-semibold block mb-2">Modo de Agendamento</Label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        className="accent-primary"
+                        checked={tipoAgendamento === "unico"} 
+                        onChange={() => setTipoAgendamento("unico")} 
+                      />
+                      <span className="text-sm font-medium">Campanha Única</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        className="accent-primary"
+                        checked={tipoAgendamento === "massa"} 
+                        onChange={() => setTipoAgendamento("massa")} 
+                      />
+                      <span className="text-sm font-medium">Campanhas em Massa (Vários Dias)</span>
+                    </label>
+                  </div>
+
+                  {tipoAgendamento === "massa" && (
+                    <div className="space-y-4 mt-4 pt-4 border-t">
+                      <div className="flex flex-col md:flex-row gap-6">
+                        <div className="bg-background rounded-lg border p-2 w-fit">
+                          <Label className="text-xs font-semibold uppercase text-muted-foreground mb-2 block px-2">Selecione as datas</Label>
+                          <Calendar
+                            mode="multiple"
+                            selected={datasMassa}
+                            onSelect={(dates) => {
+                              setDatasMassa(dates as Date[] || []);
+                              setConfigsMassa(prev => {
+                                const next = { ...prev };
+                                (dates as Date[] || []).forEach(d => {
+                                  const dateStr = format(d, "yyyy-MM-dd");
+                                  if (!next[dateStr]) {
+                                    next[dateStr] = { horarioInicio, horarioFim, pastas: [] };
+                                  }
+                                });
+                                return next;
+                              });
+                            }}
+                            locale={ptBR}
+                          />
+                        </div>
+                        
+                        <div className="flex-1 space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                          {datasMassa.length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-sm text-muted-foreground border-2 border-dashed rounded-lg p-8">
+                              Selecione as datas no calendário para configurar os disparos.
+                            </div>
+                          ) : (
+                            [...datasMassa].sort((a,b) => a.getTime() - b.getTime()).map(date => {
+                              const dateStr = format(date, "yyyy-MM-dd");
+                              const config = configsMassa[dateStr] || { horarioInicio, horarioFim, pastas: [] };
+                              return (
+                                <Card key={dateStr} className="p-4 space-y-3">
+                                  <div className="font-semibold text-primary">{format(date, "EEEE, dd 'de' MMMM", { locale: ptBR })}</div>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                      <Label className="text-xs text-muted-foreground">Horário início</Label>
+                                      <Input 
+                                        type="time" 
+                                        value={config.horarioInicio} 
+                                        onChange={e => setConfigsMassa(p => ({ ...p, [dateStr]: { ...p[dateStr], horarioInicio: e.target.value } }))}
+                                        className="h-8 text-sm"
+                                      />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      <Label className="text-xs text-muted-foreground">Horário fim</Label>
+                                      <Input 
+                                        type="time" 
+                                        value={config.horarioFim} 
+                                        onChange={e => setConfigsMassa(p => ({ ...p, [dateStr]: { ...p[dateStr], horarioFim: e.target.value } }))}
+                                        className="h-8 text-sm"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <Label className="text-xs text-muted-foreground">Pastas para este dia</Label>
+                                    <div className="flex flex-col gap-2 p-2 border rounded-md max-h-[120px] overflow-y-auto">
+                                      {pastasSel.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground">Nenhuma pasta selecionada no passo 2.</p>
+                                      ) : (
+                                        pastasSel.map(pId => {
+                                          const pNome = pastas.find(p => p.id === pId)?.nome || "Pasta";
+                                          const checked = config.pastas.includes(pId);
+                                          return (
+                                            <label key={pId} className="flex items-center gap-2 cursor-pointer">
+                                              <Checkbox 
+                                                checked={checked}
+                                                onCheckedChange={c => {
+                                                  setConfigsMassa(prev => {
+                                                    const current = prev[dateStr].pastas;
+                                                    return {
+                                                      ...prev,
+                                                      [dateStr]: {
+                                                        ...prev[dateStr],
+                                                        pastas: c 
+                                                          ? [...current, pId] 
+                                                          : current.filter(x => x !== pId)
+                                                      }
+                                                    }
+                                                  })
+                                                }}
+                                              />
+                                              <span className="text-sm">{pNome}</span>
+                                            </label>
+                                          );
+                                        })
+                                      )}
+                                    </div>
+                                  </div>
+                                </Card>
+                              )
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+
+              {tipoAgendamento === "unico" && origem === "lista" ? (
                 <div className="space-y-3 border rounded-lg p-4 bg-muted/20">
                   <label className="flex items-center gap-3 cursor-pointer">
                     <Checkbox checked={recorrente} onCheckedChange={(c) => setRecorrente(c === true)} />

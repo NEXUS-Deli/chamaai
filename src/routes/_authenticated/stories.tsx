@@ -519,11 +519,41 @@ function NovoAgendamentoModal({
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
+      const { data: u } = await supabase.auth.getUser();
+      if (u.user) {
+        const row = {
+          usuario_id: u.user.id,
+          titulo: titulo.trim() || "Publicação Imediata",
+          tipo,
+          texto: tipo === "text" ? texto.trim() : (legenda.trim() || null),
+          background_color: tipo === "text" ? bgColor : null,
+          font: tipo === "text" ? font : null,
+          file_url: fileUrl.trim() || null,
+          file_base64: fileBase64 || null,
+          mimetype: mimetype || null,
+          legenda: legenda.trim() || null,
+          max_recipients: maxRec,
+          instancias_ids: [...instSelecionadas],
+          agendado_para: new Date().toISOString(),
+          status: "enviado",
+          recorrente: false,
+          recorrencia: null,
+          resultado: {
+            publico_alvo: publicoAlvo,
+            recipients: finalRecipients,
+            response: data
+          },
+        };
+        await (supabase as any).from("stories_agendamentos").insert(row);
+      }
+
       if (totalDest > 0) {
         toast.success(`Story publicado para "${inst.nome}" visível para ${totalDest} contatos!`);
       } else {
         toast.success(`Story publicado para "${inst.nome}"!`);
       }
+      
+      onSalvo();
     } catch (e) {
       toast.error("Erro no envio: " + (e instanceof Error ? e.message : String(e)));
     } finally {
