@@ -498,23 +498,36 @@ async function processarDisparo() {
           if (!instancia) {
             await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
           } else {
-            // Valida WhatsApp
-            const telefone = formatarTelefone(contato.telefone)
-            console.log(`[disparo-cron] verificando tel=${telefone} (original=${contato.telefone})`)
-            const verificacao = await verificarWhatsApp(telefone, instancia.token)
+            // Detecta se o destino é um grupo (JID com sufixo @g.us)
+            const isGroup = contato.telefone.endsWith('@g.us')
 
-            if (verificacao.erroApi) {
-              // Erro de API (token inválido, instância desconectada, etc.) — não marca como inválido
-              console.error(`[disparo-cron] erro de API ao verificar ${telefone} — campanha ${campanha.id}`)
-              await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
-            } else if (!verificacao.isInWhatsapp) {
-              await supabase
-                .from('contatos_campanha')
-                .update({ status: 'invalido', wpp_valido: false })
-                .eq('id', contato.id)
+            let jid: string
+            if (isGroup) {
+              // Grupos: usa o JID diretamente, sem formatar telefone nem verificar no WhatsApp
+              jid = contato.telefone
+              console.log(`[disparo-cron] destino é grupo, jid=${jid}`)
             } else {
-              const jid = verificacao.jid ?? `${telefone}@s.whatsapp.net`
+              // Contatos individuais: formata e verifica
+              const telefone = formatarTelefone(contato.telefone)
+              console.log(`[disparo-cron] verificando tel=${telefone} (original=${contato.telefone})`)
+              const verificacao = await verificarWhatsApp(telefone, instancia.token)
 
+              if (verificacao.erroApi) {
+                // Erro de API (token inválido, instância desconectada, etc.) — não marca como inválido
+                console.error(`[disparo-cron] erro de API ao verificar ${telefone} — campanha ${campanha.id}`)
+                await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
+                continue
+              } else if (!verificacao.isInWhatsapp) {
+                await supabase
+                  .from('contatos_campanha')
+                  .update({ status: 'invalido', wpp_valido: false })
+                  .eq('id', contato.id)
+                continue
+              }
+              jid = verificacao.jid ?? `${telefone}@s.whatsapp.net`
+            }
+
+            {
               // Seleciona mensagem aleatória
               const variacoes = campanha.mensagens_variacoes
               const mensagemBase = variacoes.length > 0

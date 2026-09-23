@@ -135,7 +135,6 @@ async function processarContato(
   contato: ContatoCampanha,
   campanha: Campanha,
 ): Promise<void> {
-  const telefone = formatarTelefone(contato.telefone);
   const instancia = selecionarInstancia(campanha);
 
   if (!instancia) {
@@ -143,14 +142,25 @@ async function processarContato(
     return;
   }
 
-  // Verifica se tem WhatsApp
-  const verificacao = await verificarWhatsApp(telefone, instancia.token);
-  if (!verificacao.isInWhatsapp) {
-    await marcarContatoInvalido(contato.id);
-    return;
+  // Detecta se o destino é um grupo (JID com sufixo @g.us)
+  const isGroup = contato.telefone.endsWith('@g.us');
+
+  let jid: string;
+
+  if (isGroup) {
+    // Grupos: usa o JID diretamente, sem verificar no WhatsApp
+    jid = contato.telefone;
+  } else {
+    // Contatos individuais: formata e verifica
+    const telefone = formatarTelefone(contato.telefone);
+    const verificacao = await verificarWhatsApp(telefone, instancia.token);
+    if (!verificacao.isInWhatsapp) {
+      await marcarContatoInvalido(contato.id);
+      return;
+    }
+    jid = verificacao.jid ?? `${telefone}@s.whatsapp.net`;
   }
 
-  const jid = verificacao.jid ?? `${telefone}@s.whatsapp.net`;
   const mensagemBase = selecionarMensagem(campanha);
   const mensagemFinal = aplicarVariaveis(mensagemBase, contato);
 

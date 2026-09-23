@@ -136,9 +136,13 @@ function NovaCampanha() {
   const leadsSelSet = useMemo(() => new Set(leadsSel), [leadsSel]);
 
   const [contatosCSV, setContatosCSV] = useState<Contato[]>([]);
-  const [origem, setOrigem] = useState<"csv" | "lista">("csv");
+  const [origem, setOrigem] = useState<"csv" | "lista" | "grupos">("csv");
   const [loading, setLoading] = useState(false);
   const [templateModal, setTemplateModal] = useState(false);
+
+  const [gruposInstancia, setGruposInstancia] = useState<{ id: string; subject: string; size: number | null }[]>([]);
+  const [gruposSel, setGruposSel] = useState<string[]>([]);
+  const [loadingGrupos, setLoadingGrupos] = useState(false);
 
   // Filtro: excluir leads já contactados em campanhas anteriores
   const [excluirJaContactados, setExcluirJaContactados] = useState(false);
@@ -276,13 +280,50 @@ function NovaCampanha() {
     let lista: Contato[];
     if (origem === "csv") {
       lista = contatosCSV;
-    } else {
+    } else if (origem === "lista") {
       lista = leadsDaPasta.filter((l) => leadsSelSet.has(l.telefone));
+    } else {
+      lista = gruposInstancia
+        .filter((g) => gruposSel.includes(g.id))
+        .map((g) => ({ telefone: g.id, nome: g.subject, empresa: "" }));
     }
+    
     if (excluirJaContactados && jaContactados.size > 0) {
       lista = lista.filter((c) => !jaContactados.has(c.telefone));
     }
     return lista;
+  };
+
+  const buscarGruposInstancia = async () => {
+    if (instanciasSelecionadas.length === 0) {
+      toast.error("Selecione ao menos uma instância no Passo 1.");
+      return;
+    }
+    const inst = instancias.find((i) => i.id === instanciasSelecionadas[0]);
+    if (!inst) return;
+
+    setLoadingGrupos(true);
+    setGruposInstancia([]);
+    setGruposSel([]);
+    try {
+      const { data, error } = await supabase.functions.invoke("uazapi-proxy", {
+        body: { action: "get_groups", payload: { token: inst.token } },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      const lista = Array.isArray(data) ? data : [];
+      if (!lista.length) {
+        toast.info("Nenhum grupo encontrado nesta instância.");
+      } else {
+        setGruposInstancia(lista);
+        toast.success(`${lista.length} grupos encontrados`);
+      }
+    } catch (e) {
+      toast.error("Erro ao buscar grupos: " + String(e instanceof Error ? e.message : e));
+    } finally {
+      setLoadingGrupos(false);
+    }
   };
 
   const uploadMidias = async (): Promise<{ url: string; nome: string; tipo: string }[]> => {
@@ -363,6 +404,9 @@ function NovaCampanha() {
 
   const disparar = async () => {
     if (instanciasSelecionadas.length === 0) return toast.error("Selecione ao menos uma instância de WhatsApp.");
+    if (origem === "grupos" && instanciasSelecionadas.length > 1) {
+      return toast.error("Para envios em grupos, selecione apenas 1 instância (os grupos são vinculados à instância).");
+    }
     setLoading(true);
     try {
       const { data: u } = await supabase.auth.getUser();
@@ -431,14 +475,23 @@ function NovaCampanha() {
         for (const date of datasMassa) {
           const dateStr = format(date, "yyyy-MM-dd");
           const config = configsMassa[dateStr];
-          if (!config || config.pastas.length === 0) continue;
+          if (!config) continue;
           
-          const leadsDesteDia = contatosBase.filter((c: any) => {
-            const l = leadsDaPasta.find(x => x.telefone === c.telefone);
-            return l && l.pasta_id && config.pastas.includes(l.pasta_id);
-          });
+          // Para lista: valida pastas e filtra leads do dia
+          // Para grupos: usa todos os grupos selecionados em cada data
+          let contatosDesteDia: { telefone: string; nome: string; empresa: string }[];
+          if (origem === "grupos") {
+            if (gruposSel.length === 0) continue;
+            contatosDesteDia = contatosBase; // todos os grupos selecionados
+          } else {
+            if (config.pastas.length === 0) continue;
+            contatosDesteDia = contatosBase.filter((c: any) => {
+              const l = leadsDaPasta.find(x => x.telefone === c.telefone);
+              return l && l.pasta_id && config.pastas.includes(l.pasta_id);
+            });
+          }
           
-          if (leadsDesteDia.length === 0) continue;
+          if (contatosDesteDia.length === 0) continue;
           
           const nomeMassa = `${nome} - ${format(date, "dd/MM/yyyy")}`;
           const agendamentoStr = `${dateStr}T${config.horarioInicio}`;
@@ -466,11 +519,11 @@ function NovaCampanha() {
               midia_tipo: primeiraMidia?.tipo ?? null,
               midia_path: null,
               midia_bucket: primeiraMidia ? "midias" : null,
-              total_contatos: leadsDesteDia.length,
+              total_contatos: contatosDesteDia.length,
               status: "agendada",
               agendada_para: formatarDataParaBRT(agendamentoStr),
               recorrente: false,
-              pasta_ids: config.pastas,
+              pasta_ids: origem === "lista" ? config.pastas : null,
             })
             .select()
             .single();
@@ -478,7 +531,7 @@ function NovaCampanha() {
           if (error || !camp) { toast.error(error?.message ?? "Erro ao criar campanha em massa"); continue; }
 
           await supabase.from("contatos_campanha").insert(
-            leadsDesteDia.map((c) => ({ campanha_id: camp.id, telefone: c.telefone, nome: c.nome, empresa: c.empresa })),
+            contatosDesteDia.map((c) => ({ campanha_id: camp.id, telefone: c.telefone, nome: c.nome, empresa: c.empresa })),
           );
           criadas++;
         }
@@ -496,7 +549,7 @@ function NovaCampanha() {
   const contatosFiltrados = getContatos();
   const totalContatos = contatosFiltrados.length;
   const totalExcluidos = excluirJaContactados
-    ? (origem === "csv" ? contatosCSV.length : leadsSel.length) - totalContatos
+    ? (origem === "csv" ? contatosCSV.length : origem === "lista" ? leadsSel.length : gruposSel.length) - totalContatos
     : 0;
   const totalMidias = midiasFiles.length + midiasTemplates.length;
   const mensagemPrincipal = mensagensVariacoes.length > 0 ? `${mensagensVariacoes.length} variação(ões)` : mensagem ? "1 mensagem" : "—";
@@ -756,10 +809,11 @@ function NovaCampanha() {
             </div>
           </div>
 
-          <Tabs value={origem} onValueChange={(v) => setOrigem(v as "csv" | "lista")}>
+          <Tabs value={origem} onValueChange={(v) => setOrigem(v as "csv" | "lista" | "grupos")}>
             <TabsList>
               <TabsTrigger value="csv">Importar CSV</TabsTrigger>
               <TabsTrigger value="lista">Lista salva (Pastas)</TabsTrigger>
+              <TabsTrigger value="grupos">Grupos da Instância</TabsTrigger>
             </TabsList>
 
             <TabsContent value="csv" className="space-y-4 mt-4">
@@ -877,6 +931,70 @@ function NovaCampanha() {
                 </div>
               )}
             </TabsContent>
+
+            <TabsContent value="grupos" className="space-y-4 mt-4">
+              <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-900">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Disparo para Grupos</p>
+                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                    A mensagem será enviada diretamente nos grupos que a instância selecionada participa. Certifique-se de selecionar apenas 1 instância no Passo 1.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={buscarGruposInstancia}
+                  disabled={loadingGrupos || instanciasSelecionadas.length === 0}
+                >
+                  {loadingGrupos ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Buscando grupos…</>
+                  ) : (
+                    <><Plus className="w-4 h-4 mr-2" />Buscar grupos da instância</>
+                  )}
+                </Button>
+                {instanciasSelecionadas.length === 0 && (
+                  <p className="text-xs text-orange-600">Selecione uma instância no Passo 1 primeiro.</p>
+                )}
+              </div>
+
+              {gruposInstancia.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <Label>Grupos ({gruposInstancia.length} encontrados)</Label>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setGruposSel(gruposInstancia.map((g) => g.id))}>
+                        Marcar todos
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setGruposSel([])}>
+                        Desmarcar
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto space-y-1 p-2 border rounded">
+                    {gruposInstancia.map((g) => (
+                      <label key={g.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted cursor-pointer">
+                        <Checkbox
+                          checked={gruposSel.includes(g.id)}
+                          onCheckedChange={(c) =>
+                            setGruposSel(c ? [...gruposSel, g.id] : gruposSel.filter((x) => x !== g.id))
+                          }
+                        />
+                        <span className="text-sm font-medium flex-1">{g.subject}</span>
+                        {g.size != null && (
+                          <span className="text-xs text-muted-foreground shrink-0">{g.size} membros</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-sm font-medium text-primary">
+                    Selecionados: {gruposSel.length} grupo(s)
+                  </p>
+                </div>
+              )}
+            </TabsContent>
           </Tabs>
         </Card>
       )}
@@ -902,7 +1020,12 @@ function NovaCampanha() {
                 <div><Label className="text-muted-foreground">Horário início</Label><p>{horarioInicio}</p></div>
                 <div><Label className="text-muted-foreground">Horário fim</Label><p>{horarioFim}</p></div>
               </div>
-              <div><Label className="text-muted-foreground">Contatos</Label><p className="font-bold text-primary">{totalContatos}</p></div>
+              <div>
+                <Label className="text-muted-foreground">{origem === "grupos" ? "Grupos selecionados" : "Contatos"}</Label>
+                <p className="font-bold text-primary">
+                  {origem === "grupos" ? gruposSel.length : totalContatos}
+                </p>
+              </div>
             </div>
             <div className="space-y-4">
               <div><Label className="text-muted-foreground">Mensagens</Label><p>{mensagemPrincipal}</p></div>
@@ -922,7 +1045,7 @@ function NovaCampanha() {
               </div>
               {tipoAgendamento === "unico" && (<div className="space-y-2"><Label className="text-muted-foreground">Agendar para (opcional)</Label><Input type="datetime-local" value={agendarPara} onChange={(e) => setAgendarPara(e.target.value)} /></div>)}
 
-              {origem === "lista" && (
+              {(origem === "lista" || origem === "grupos") && (
                 <div className="space-y-4 border rounded-lg p-4 bg-muted/10 mt-4">
                   <Label className="text-base font-semibold block mb-2">Modo de Agendamento</Label>
                   <div className="flex gap-4">
@@ -1003,41 +1126,50 @@ function NovaCampanha() {
                                       />
                                     </div>
                                   </div>
-                                  <div className="space-y-1.5">
-                                    <Label className="text-xs text-muted-foreground">Pastas para este dia</Label>
-                                    <div className="flex flex-col gap-2 p-2 border rounded-md max-h-[120px] overflow-y-auto">
-                                      {pastasSel.length === 0 ? (
-                                        <p className="text-xs text-muted-foreground">Nenhuma pasta selecionada no passo 2.</p>
-                                      ) : (
-                                        pastasSel.map(pId => {
-                                          const pNome = pastas.find(p => p.id === pId)?.nome || "Pasta";
-                                          const checked = config.pastas.includes(pId);
-                                          return (
-                                            <label key={pId} className="flex items-center gap-2 cursor-pointer">
-                                              <Checkbox 
-                                                checked={checked}
-                                                onCheckedChange={c => {
-                                                  setConfigsMassa(prev => {
-                                                    const current = prev[dateStr].pastas;
-                                                    return {
-                                                      ...prev,
-                                                      [dateStr]: {
-                                                        ...prev[dateStr],
-                                                        pastas: c 
-                                                          ? [...current, pId] 
-                                                          : current.filter(x => x !== pId)
+                                  {/* Seleção de pastas apenas para origin=lista */}
+                                  {origem === "lista" && (
+                                    <div className="space-y-1.5">
+                                      <Label className="text-xs text-muted-foreground">Pastas para este dia</Label>
+                                      <div className="flex flex-col gap-2 p-2 border rounded-md max-h-[120px] overflow-y-auto">
+                                        {pastasSel.length === 0 ? (
+                                          <p className="text-xs text-muted-foreground">Nenhuma pasta selecionada no passo 2.</p>
+                                        ) : (
+                                          pastasSel.map(pId => {
+                                            const pNome = pastas.find(p => p.id === pId)?.nome || "Pasta";
+                                            const checked = config.pastas.includes(pId);
+                                            return (
+                                              <label key={pId} className="flex items-center gap-2 cursor-pointer">
+                                                <Checkbox 
+                                                  checked={checked}
+                                                  onCheckedChange={c => {
+                                                    setConfigsMassa(prev => {
+                                                      const current = prev[dateStr].pastas;
+                                                      return {
+                                                        ...prev,
+                                                        [dateStr]: {
+                                                          ...prev[dateStr],
+                                                          pastas: c 
+                                                            ? [...current, pId] 
+                                                            : current.filter(x => x !== pId)
+                                                        }
                                                       }
-                                                    }
-                                                  })
-                                                }}
-                                              />
-                                              <span className="text-sm">{pNome}</span>
-                                            </label>
-                                          );
-                                        })
-                                      )}
+                                                    })
+                                                  }}
+                                                />
+                                                <span className="text-sm">{pNome}</span>
+                                              </label>
+                                            );
+                                          })
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
+                                  )}
+                                  {/* Para grupos: mostra quais grupos serão disparados nesta data */}
+                                  {origem === "grupos" && (
+                                    <p className="text-xs text-muted-foreground">
+                                      {gruposSel.length} grupo(s) selecionado(s) serão disparados nesta data.
+                                    </p>
+                                  )}
                                 </Card>
                               )
                             })
