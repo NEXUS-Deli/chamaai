@@ -70,6 +70,11 @@ export type Database = {
           status: string
           total_contatos: number
           usuario_id: string
+          tipo_campanha: string | null
+          email_credential_id: string | null
+          email_assunto: string | null
+          email_conteudo_html: string | null
+          lidos: number | null
         }
         Insert: {
           agendada_para?: string | null
@@ -101,6 +106,10 @@ export type Database = {
           status?: string
           total_contatos?: number
           usuario_id: string
+          tipo_campanha?: string | null
+          email_credential_id?: string | null
+          email_assunto?: string | null
+          email_conteudo_html?: string | null
         }
         Update: {
           agendada_para?: string | null
@@ -132,6 +141,10 @@ export type Database = {
           status?: string
           total_contatos?: number
           usuario_id?: string
+          tipo_campanha?: string | null
+          email_credential_id?: string | null
+          email_assunto?: string | null
+          email_conteudo_html?: string | null
         }
         Relationships: [
           {
@@ -141,6 +154,101 @@ export type Database = {
             referencedRelation: "instancias"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "campanhas_email_credential_id_fkey"
+            columns: ["email_credential_id"]
+            isOneToOne: false
+            referencedRelation: "email_credentials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_credentials: {
+        Row: {
+          id: string
+          usuario_id: string
+          host: string
+          port: number
+          username: string
+          password: string
+          from_name: string
+          from_email: string
+          encryption: string | null
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          usuario_id: string
+          host: string
+          port: number
+          username: string
+          password: string
+          from_name: string
+          from_email: string
+          encryption?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: string
+          usuario_id?: string
+          host?: string
+          port?: number
+          username?: string
+          password?: string
+          from_name?: string
+          from_email?: string
+          encryption?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_credentials_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      email_templates: {
+        Row: {
+          id: string
+          usuario_id: string
+          nome: string
+          assunto: string
+          conteudo_html: string
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          usuario_id: string
+          nome: string
+          assunto: string
+          conteudo_html: string
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: string
+          usuario_id?: string
+          nome?: string
+          assunto?: string
+          conteudo_html?: string
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_templates_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
         ]
       }
       configuracoes: {

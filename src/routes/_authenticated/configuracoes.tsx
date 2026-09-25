@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff, AlertTriangle, Radio, ShieldCheck, Copy } from "lucide-react";
+import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff, AlertTriangle, Radio, ShieldCheck, Copy, Mail } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { canAddConnection } from "@/lib/plans";
+import { EmailCredentialsModal } from "@/components/email-credentials-modal";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   component: ConfigPage,
@@ -88,6 +89,7 @@ function ConfigPage() {
 
   // Connection Modal States
   const [connectModalOpen, setConnectModalOpen] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [activeInstancia, setActiveInstancia] = useState<Instancia | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [connectStatus, setConnectStatus] = useState<"idle" | "loading" | "awaiting_scan" | "connected" | "error">("idle");
@@ -484,6 +486,13 @@ function ConfigPage() {
         </Button>
       </div>
 
+      <div className="flex gap-4 items-center mb-6">
+        <Button onClick={() => setEmailModalOpen(true)} className="gap-2">
+          <Mail className="w-4 h-4" />
+          Credenciais de E-mail
+        </Button>
+      </div>
+
       {/* Banner de plano */}
       {planInfo === "no_plan" && (
         <div className="flex items-center gap-3 rounded-lg border border-yellow-300 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-700 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
@@ -694,6 +703,11 @@ function ConfigPage() {
           </Button>
         </DialogContent>
       </Dialog>
+      
+      <EmailCredentialsModal 
+        isOpen={emailModalOpen} 
+        onClose={() => setEmailModalOpen(false)} 
+      />
     </div>
   );
 }

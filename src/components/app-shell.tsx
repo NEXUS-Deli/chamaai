@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Users, LogOut, Flame, Menu, X, ChevronLeft, ChevronRight, Sun, Moon, Wrench, Clapperboard, FileText, Send, ShieldCheck, Bot } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Flame, Menu, X, ChevronLeft, ChevronRight, Sun, Moon, Wrench, Clapperboard, FileText, Send, ShieldCheck, Bot, Mail } from "lucide-react";
 import { type ReactNode, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBranding } from "@/lib/branding";
@@ -21,6 +21,7 @@ const items = [
   { to: "/stories", label: "Stories do WhatsApp", icon: Clapperboard },
   { to: "/leads", label: "Clientes/Leads", icon: Users },
   { to: "/templates", label: "Templates", icon: FileText },
+  { to: "/email-marketing", label: "E-mail Marketing", icon: Mail },
   { to: "/configuracoes", label: "Conexões", icon: WhatsAppIcon },
   { to: "/ferramentas/verificador", label: "Ferramentas", icon: Wrench },
 ];
@@ -76,6 +77,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         const active =
           item.to === "/campanhas"
             ? pathname === "/campanhas" || (pathname.startsWith("/campanhas/") && !pathname.startsWith("/campanhas/nova"))
+            : item.to === "/email-marketing"
+            ? pathname.startsWith("/email-marketing")
             : item.to === "/ferramentas/verificador"
             ? pathname.startsWith("/ferramentas")
             : pathname === item.to || pathname.startsWith(item.to + "/");

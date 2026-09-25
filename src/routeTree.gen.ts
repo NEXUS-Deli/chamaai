@@ -19,12 +19,15 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedFerramentasIndexRouteImport } from './routes/_authenticated/ferramentas.index'
+import { Route as AuthenticatedEmailMarketingIndexRouteImport } from './routes/_authenticated/email-marketing.index'
 import { Route as AuthenticatedCampanhasIndexRouteImport } from './routes/_authenticated/campanhas.index'
 import { Route as AuthenticatedAtendimentoIaIndexRouteImport } from './routes/_authenticated/atendimento-ia.index'
 import { Route as AuthenticatedFerramentasVerificadorRouteImport } from './routes/_authenticated/ferramentas.verificador'
 import { Route as AuthenticatedFerramentasImportadorRouteImport } from './routes/_authenticated/ferramentas.importador'
 import { Route as AuthenticatedFerramentasExtratorRouteImport } from './routes/_authenticated/ferramentas.extrator'
 import { Route as AuthenticatedFerramentasBlacklistRouteImport } from './routes/_authenticated/ferramentas.blacklist'
+import { Route as AuthenticatedEmailMarketingNovaRouteImport } from './routes/_authenticated/email-marketing.nova'
+import { Route as AuthenticatedEmailMarketingIdRouteImport } from './routes/_authenticated/email-marketing.$id'
 import { Route as AuthenticatedCampanhasNovaRouteImport } from './routes/_authenticated/campanhas.nova'
 import { Route as AuthenticatedCampanhasIdRouteImport } from './routes/_authenticated/campanhas.$id'
 import { Route as AuthenticatedAtendimentoIaNovaRouteImport } from './routes/_authenticated/atendimento-ia.nova'
@@ -81,6 +84,12 @@ const AuthenticatedFerramentasIndexRoute =
     path: '/ferramentas/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedEmailMarketingIndexRoute =
+  AuthenticatedEmailMarketingIndexRouteImport.update({
+    id: '/email-marketing/',
+    path: '/email-marketing/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCampanhasIndexRoute =
   AuthenticatedCampanhasIndexRouteImport.update({
     id: '/campanhas/',
@@ -115,6 +124,18 @@ const AuthenticatedFerramentasBlacklistRoute =
   AuthenticatedFerramentasBlacklistRouteImport.update({
     id: '/ferramentas/blacklist',
     path: '/ferramentas/blacklist',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEmailMarketingNovaRoute =
+  AuthenticatedEmailMarketingNovaRouteImport.update({
+    id: '/email-marketing/nova',
+    path: '/email-marketing/nova',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEmailMarketingIdRoute =
+  AuthenticatedEmailMarketingIdRouteImport.update({
+    id: '/email-marketing/$id',
+    path: '/email-marketing/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedCampanhasNovaRoute =
@@ -155,12 +176,15 @@ export interface FileRoutesByFullPath {
   '/atendimento-ia/nova': typeof AuthenticatedAtendimentoIaNovaRoute
   '/campanhas/$id': typeof AuthenticatedCampanhasIdRoute
   '/campanhas/nova': typeof AuthenticatedCampanhasNovaRoute
+  '/email-marketing/$id': typeof AuthenticatedEmailMarketingIdRoute
+  '/email-marketing/nova': typeof AuthenticatedEmailMarketingNovaRoute
   '/ferramentas/blacklist': typeof AuthenticatedFerramentasBlacklistRoute
   '/ferramentas/extrator': typeof AuthenticatedFerramentasExtratorRoute
   '/ferramentas/importador': typeof AuthenticatedFerramentasImportadorRoute
   '/ferramentas/verificador': typeof AuthenticatedFerramentasVerificadorRoute
   '/atendimento-ia/': typeof AuthenticatedAtendimentoIaIndexRoute
   '/campanhas/': typeof AuthenticatedCampanhasIndexRoute
+  '/email-marketing/': typeof AuthenticatedEmailMarketingIndexRoute
   '/ferramentas/': typeof AuthenticatedFerramentasIndexRoute
 }
 export interface FileRoutesByTo {
@@ -176,12 +200,15 @@ export interface FileRoutesByTo {
   '/atendimento-ia/nova': typeof AuthenticatedAtendimentoIaNovaRoute
   '/campanhas/$id': typeof AuthenticatedCampanhasIdRoute
   '/campanhas/nova': typeof AuthenticatedCampanhasNovaRoute
+  '/email-marketing/$id': typeof AuthenticatedEmailMarketingIdRoute
+  '/email-marketing/nova': typeof AuthenticatedEmailMarketingNovaRoute
   '/ferramentas/blacklist': typeof AuthenticatedFerramentasBlacklistRoute
   '/ferramentas/extrator': typeof AuthenticatedFerramentasExtratorRoute
   '/ferramentas/importador': typeof AuthenticatedFerramentasImportadorRoute
   '/ferramentas/verificador': typeof AuthenticatedFerramentasVerificadorRoute
   '/atendimento-ia': typeof AuthenticatedAtendimentoIaIndexRoute
   '/campanhas': typeof AuthenticatedCampanhasIndexRoute
+  '/email-marketing': typeof AuthenticatedEmailMarketingIndexRoute
   '/ferramentas': typeof AuthenticatedFerramentasIndexRoute
 }
 export interface FileRoutesById {
@@ -199,12 +226,15 @@ export interface FileRoutesById {
   '/_authenticated/atendimento-ia/nova': typeof AuthenticatedAtendimentoIaNovaRoute
   '/_authenticated/campanhas/$id': typeof AuthenticatedCampanhasIdRoute
   '/_authenticated/campanhas/nova': typeof AuthenticatedCampanhasNovaRoute
+  '/_authenticated/email-marketing/$id': typeof AuthenticatedEmailMarketingIdRoute
+  '/_authenticated/email-marketing/nova': typeof AuthenticatedEmailMarketingNovaRoute
   '/_authenticated/ferramentas/blacklist': typeof AuthenticatedFerramentasBlacklistRoute
   '/_authenticated/ferramentas/extrator': typeof AuthenticatedFerramentasExtratorRoute
   '/_authenticated/ferramentas/importador': typeof AuthenticatedFerramentasImportadorRoute
   '/_authenticated/ferramentas/verificador': typeof AuthenticatedFerramentasVerificadorRoute
   '/_authenticated/atendimento-ia/': typeof AuthenticatedAtendimentoIaIndexRoute
   '/_authenticated/campanhas/': typeof AuthenticatedCampanhasIndexRoute
+  '/_authenticated/email-marketing/': typeof AuthenticatedEmailMarketingIndexRoute
   '/_authenticated/ferramentas/': typeof AuthenticatedFerramentasIndexRoute
 }
 export interface FileRouteTypes {
@@ -222,12 +252,15 @@ export interface FileRouteTypes {
     | '/atendimento-ia/nova'
     | '/campanhas/$id'
     | '/campanhas/nova'
+    | '/email-marketing/$id'
+    | '/email-marketing/nova'
     | '/ferramentas/blacklist'
     | '/ferramentas/extrator'
     | '/ferramentas/importador'
     | '/ferramentas/verificador'
     | '/atendimento-ia/'
     | '/campanhas/'
+    | '/email-marketing/'
     | '/ferramentas/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -243,12 +276,15 @@ export interface FileRouteTypes {
     | '/atendimento-ia/nova'
     | '/campanhas/$id'
     | '/campanhas/nova'
+    | '/email-marketing/$id'
+    | '/email-marketing/nova'
     | '/ferramentas/blacklist'
     | '/ferramentas/extrator'
     | '/ferramentas/importador'
     | '/ferramentas/verificador'
     | '/atendimento-ia'
     | '/campanhas'
+    | '/email-marketing'
     | '/ferramentas'
   id:
     | '__root__'
@@ -265,12 +301,15 @@ export interface FileRouteTypes {
     | '/_authenticated/atendimento-ia/nova'
     | '/_authenticated/campanhas/$id'
     | '/_authenticated/campanhas/nova'
+    | '/_authenticated/email-marketing/$id'
+    | '/_authenticated/email-marketing/nova'
     | '/_authenticated/ferramentas/blacklist'
     | '/_authenticated/ferramentas/extrator'
     | '/_authenticated/ferramentas/importador'
     | '/_authenticated/ferramentas/verificador'
     | '/_authenticated/atendimento-ia/'
     | '/_authenticated/campanhas/'
+    | '/_authenticated/email-marketing/'
     | '/_authenticated/ferramentas/'
   fileRoutesById: FileRoutesById
 }
@@ -352,6 +391,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFerramentasIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/email-marketing/': {
+      id: '/_authenticated/email-marketing/'
+      path: '/email-marketing'
+      fullPath: '/email-marketing/'
+      preLoaderRoute: typeof AuthenticatedEmailMarketingIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/campanhas/': {
       id: '/_authenticated/campanhas/'
       path: '/campanhas'
@@ -392,6 +438,20 @@ declare module '@tanstack/react-router' {
       path: '/ferramentas/blacklist'
       fullPath: '/ferramentas/blacklist'
       preLoaderRoute: typeof AuthenticatedFerramentasBlacklistRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/email-marketing/nova': {
+      id: '/_authenticated/email-marketing/nova'
+      path: '/email-marketing/nova'
+      fullPath: '/email-marketing/nova'
+      preLoaderRoute: typeof AuthenticatedEmailMarketingNovaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/email-marketing/$id': {
+      id: '/_authenticated/email-marketing/$id'
+      path: '/email-marketing/$id'
+      fullPath: '/email-marketing/$id'
+      preLoaderRoute: typeof AuthenticatedEmailMarketingIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/campanhas/nova': {
@@ -436,12 +496,15 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAtendimentoIaNovaRoute: typeof AuthenticatedAtendimentoIaNovaRoute
   AuthenticatedCampanhasIdRoute: typeof AuthenticatedCampanhasIdRoute
   AuthenticatedCampanhasNovaRoute: typeof AuthenticatedCampanhasNovaRoute
+  AuthenticatedEmailMarketingIdRoute: typeof AuthenticatedEmailMarketingIdRoute
+  AuthenticatedEmailMarketingNovaRoute: typeof AuthenticatedEmailMarketingNovaRoute
   AuthenticatedFerramentasBlacklistRoute: typeof AuthenticatedFerramentasBlacklistRoute
   AuthenticatedFerramentasExtratorRoute: typeof AuthenticatedFerramentasExtratorRoute
   AuthenticatedFerramentasImportadorRoute: typeof AuthenticatedFerramentasImportadorRoute
   AuthenticatedFerramentasVerificadorRoute: typeof AuthenticatedFerramentasVerificadorRoute
   AuthenticatedAtendimentoIaIndexRoute: typeof AuthenticatedAtendimentoIaIndexRoute
   AuthenticatedCampanhasIndexRoute: typeof AuthenticatedCampanhasIndexRoute
+  AuthenticatedEmailMarketingIndexRoute: typeof AuthenticatedEmailMarketingIndexRoute
   AuthenticatedFerramentasIndexRoute: typeof AuthenticatedFerramentasIndexRoute
 }
 
@@ -456,6 +519,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAtendimentoIaNovaRoute: AuthenticatedAtendimentoIaNovaRoute,
   AuthenticatedCampanhasIdRoute: AuthenticatedCampanhasIdRoute,
   AuthenticatedCampanhasNovaRoute: AuthenticatedCampanhasNovaRoute,
+  AuthenticatedEmailMarketingIdRoute: AuthenticatedEmailMarketingIdRoute,
+  AuthenticatedEmailMarketingNovaRoute: AuthenticatedEmailMarketingNovaRoute,
   AuthenticatedFerramentasBlacklistRoute:
     AuthenticatedFerramentasBlacklistRoute,
   AuthenticatedFerramentasExtratorRoute: AuthenticatedFerramentasExtratorRoute,
@@ -465,6 +530,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedFerramentasVerificadorRoute,
   AuthenticatedAtendimentoIaIndexRoute: AuthenticatedAtendimentoIaIndexRoute,
   AuthenticatedCampanhasIndexRoute: AuthenticatedCampanhasIndexRoute,
+  AuthenticatedEmailMarketingIndexRoute: AuthenticatedEmailMarketingIndexRoute,
   AuthenticatedFerramentasIndexRoute: AuthenticatedFerramentasIndexRoute,
 }
 

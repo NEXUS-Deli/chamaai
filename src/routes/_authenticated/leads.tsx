@@ -725,7 +725,8 @@ function ImportModal({ open, onClose, pastas, onDone }: { open: boolean; onClose
       const BATCH_SIZE = 200;
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const chunk = rows.slice(i, i + BATCH_SIZE);
-        const { error } = await supabase.from("leads").upsert(chunk, { onConflict: "usuario_id,telefone" });
+        const chunkToInsert = chunk.map(({ tags, ...rest }) => rest);
+        const { error } = await supabase.from("leads").upsert(chunkToInsert, { onConflict: "usuario_id,telefone" });
         if (error) throw error;
       }
 
@@ -834,7 +835,6 @@ function AddModal({ open, onClose, pastas, onDone, pastaAtual }: { open: boolean
       nome: form.nome.trim() || null,
       empresa: form.empresa.trim() || null,
       notas: form.notas.trim() || null,
-      tags: [],
     }, { onConflict: "usuario_id,telefone" });
     if (error) return toast.error(error.message);
     toast.success("Contato adicionado");
