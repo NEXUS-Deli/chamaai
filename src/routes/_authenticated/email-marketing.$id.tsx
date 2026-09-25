@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Pause, Play, X, Loader2, Filter, Download, Mail, RefreshCw } from "lucide-react";
+import { Pause, Play, X, Loader2, Filter, Download, Mail, RefreshCw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/email-marketing/$id")({
@@ -97,6 +97,25 @@ function EmailCampanhaDetalhes() {
       toast.success("Campanha cancelada.");
     });
 
+  const handleReenviarErros = () =>
+    acaoComLoading(async () => {
+      const agora = new Date().toISOString();
+      const { error: e1 } = await supabase
+        .from("contatos_campanha")
+        .update({ status: "pendente", next_send_at: agora })
+        .eq("campanha_id", id)
+        .in("status", ["erro", "invalido"]);
+      if (e1) throw e1;
+
+      const { error: e2 } = await supabase
+        .from("campanhas")
+        .update({ status: "em_andamento" })
+        .eq("id", id);
+      if (e2) throw e2;
+
+      toast.success("Contatos redefinidos para envio! O disparo iniciará em instantes.");
+    });
+
   const enviadasCount = contatos.filter((c) => ["enviado", "entregue", "lido"].includes(c.status)).length;
   const errosCount = contatos.filter((c) => ["erro", "invalido"].includes(c.status)).length;
   const pendentesCount = contatos.filter((c) => c.status === "pendente").length;
@@ -180,6 +199,12 @@ function EmailCampanhaDetalhes() {
           {["aguardando", "agendada", "em_andamento", "pausada"].includes(camp.status) && (
             <Button variant="outline" onClick={handleCancelar} disabled={loadingAcao}>
               <X className="w-4 h-4 mr-2" />Cancelar
+            </Button>
+          )}
+          {errosCount > 0 && (
+            <Button variant="secondary" onClick={handleReenviarErros} disabled={loadingAcao}>
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Reenviar Erros ({errosCount})
             </Button>
           )}
           <Button variant="ghost" size="icon" onClick={load} title="Atualizar">

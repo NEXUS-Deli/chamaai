@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
+import nodemailer from "nodemailer"
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -146,6 +147,60 @@ interface Campanha {
   serie_recorrencia_id: string | null
   instancia_whatsapp: string | null
   instancia_nome: string | null
+  tipo_campanha?: string | null
+  email_credential_id?: string | null
+  email_assunto?: string | null
+  email_conteudo_html?: string | null
+}
+
+interface EmailCredential {
+  id: string
+  usuario_id: string
+  host: string
+  port: number
+  username: string
+  password: string
+  from_name: string
+  from_email: string
+  encryption: string | null
+}
+
+async function enviarEmail(
+  cred: EmailCredential,
+  paraEmail: string,
+  paraNome: string | null,
+  assunto: string,
+  conteudoHtml: string,
+): Promise<{ ok: boolean; messageId?: string; erro?: string }> {
+  try {
+    const isSsl = cred.port === 465 || cred.encryption === 'ssl'
+    const transporter = nodemailer.createTransport({
+      host: cred.host,
+      port: cred.port,
+      secure: isSsl,
+      auth: {
+        user: cred.username,
+        pass: cred.password,
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    })
+
+    const info = await transporter.sendMail({
+      from: `"${cred.from_name}" <${cred.from_email}>`,
+      to: paraNome ? `"${paraNome}" <${paraEmail}>` : paraEmail,
+      subject: assunto,
+      html: conteudoHtml,
+      text: conteudoHtml.replace(/<[^>]*>?/gm, ''),
+    })
+
+    return { ok: true, messageId: info.messageId }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[disparo-cron] Falha ao enviar e-mail para ${paraEmail}:`, msg)
+    return { ok: false, erro: msg }
+  }
 }
 
 interface ContatoCampanha {
@@ -487,8 +542,51 @@ async function processarDisparo() {
           .maybeSingle()
 
         if (reivindicado) {
-          // Seleciona instância aleatória
-          const instancias = campanha.instancias_selecionadas
+          if (campanha.tipo_campanha === 'EMAIL') {
+            if (!campanha.email_credential_id) {
+              console.error(`[disparo-cron] Campanha de e-mail ${campanha.id} sem credencial configurada.`)
+              await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
+            } else {
+              const { data: credData, error: credErr } = await supabase
+                .from('email_credentials')
+                .select('*')
+                .eq('id', campanha.email_credential_id)
+                .single()
+
+              if (credErr || !credData) {
+                console.error(`[disparo-cron] Credencial ${campanha.email_credential_id} não encontrada:`, credErr)
+                await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
+              } else {
+                const cred = credData as EmailCredential
+                const assuntoFinal = aplicarVariaveis(campanha.email_assunto || campanha.mensagem || 'Sem assunto', contato)
+                const htmlFinal = aplicarVariaveis(campanha.email_conteudo_html || campanha.mensagem || '', contato)
+                const destinoEmail = contato.telefone.trim()
+
+                console.log(`[disparo-cron] Enviando e-mail para ${destinoEmail} (campanha ${campanha.id})`)
+                const envio = await enviarEmail(cred, destinoEmail, contato.nome, assuntoFinal, htmlFinal)
+
+                if (envio.ok) {
+                  await supabase
+                    .from('contatos_campanha')
+                    .update({
+                      status: 'enviado',
+                      mensagem_id: envio.messageId,
+                      mensagem_enviada: assuntoFinal,
+                    })
+                    .eq('id', contato.id)
+                } else {
+                  await supabase
+                    .from('contatos_campanha')
+                    .update({
+                      status: 'erro',
+                    })
+                    .eq('id', contato.id)
+                }
+              }
+            }
+          } else {
+            // Seleciona instância aleatória (WhatsApp)
+            const instancias = campanha.instancias_selecionadas
           const instancia = instancias.length > 0
             ? escolherAleatorio(instancias)
             : campanha.instancia_token
@@ -568,6 +666,7 @@ async function processarDisparo() {
                 .eq('id', contato.id)
             }
           }
+        }
 
           // Agenda o próximo contato ainda não agendado com um novo delay aleatório
           const { data: proximo } = await supabase
