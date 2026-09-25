@@ -309,6 +309,11 @@ function EmailCampanhaDetalhes() {
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${CONTATO_STATUS_COLOR[c.status] ?? "bg-muted"}`}>
                       {CONTATO_STATUS_LABEL[c.status] ?? c.status}
                     </span>
+                    {c.status === "erro" && c.mensagem_enviada && (
+                      <p className="text-[11px] text-destructive mt-1 max-w-[280px] break-words leading-tight" title={c.mensagem_enviada}>
+                        {c.mensagem_enviada}
+                      </p>
+                    )}
                   </td>
                   <td className="py-3 text-muted-foreground text-xs">
                     {new Date(c.atualizado_em).toLocaleString("pt-BR")}

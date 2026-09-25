@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Trash2, Plus, Mail, Loader2, Save } from "lucide-react";
+import { Trash2, Plus, Mail, Loader2, Save, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface EmailCredential {
@@ -20,6 +20,7 @@ interface EmailCredential {
 export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [credentials, setCredentials] = useState<EmailCredential[]>([]);
   const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [adding, setAdding] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -116,6 +117,43 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
     setLoading(false);
   };
 
+  const handleTestarConexao = async (dados: {
+    host: string;
+    port: string | number;
+    username: string;
+    password?: string;
+    encryption?: string | null;
+  }) => {
+    if (!dados.host || !dados.username || !dados.password) {
+      toast.error("Preencha o servidor, usuário e senha para testar a conexão.");
+      return;
+    }
+    setTesting(true);
+    try {
+      const res = await fetch("https://jaoxormsyftctpsegtza.supabase.co/functions/v1/testar-smtp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: dados.host.trim(),
+          port: Number(dados.port),
+          username: dados.username.trim(),
+          password: dados.password,
+          encryption: dados.encryption,
+        }),
+      });
+      const result = await res.json();
+      if (result.ok) {
+        toast.success(result.message || "Conexão SMTP validada com sucesso!");
+      } else {
+        toast.error(result.error || "Falha na conexão SMTP.");
+      }
+    } catch (err: unknown) {
+      toast.error("Erro ao testar: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -196,12 +234,24 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
                   />
                 </div>
               </div>
-              <div className="flex gap-2 justify-end pt-2">
-                <Button variant="ghost" size="sm" onClick={() => setAdding(false)}>Cancelar</Button>
-                <Button size="sm" onClick={handleSave} disabled={loading}>
-                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                  Salvar
+              <div className="flex gap-2 justify-between items-center pt-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleTestarConexao(formData)} 
+                  disabled={testing || loading}
+                >
+                  {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />}
+                  {testing ? "Testando..." : "Testar Conexão"}
                 </Button>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setAdding(false)}>Cancelar</Button>
+                  <Button size="sm" onClick={handleSave} disabled={loading || testing}>
+                    {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    Salvar
+                  </Button>
+                </div>
               </div>
             </Card>
           )}

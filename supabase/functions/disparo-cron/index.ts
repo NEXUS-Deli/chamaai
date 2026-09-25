@@ -545,7 +545,7 @@ async function processarDisparo() {
           if (campanha.tipo_campanha === 'EMAIL') {
             if (!campanha.email_credential_id) {
               console.error(`[disparo-cron] Campanha de e-mail ${campanha.id} sem credencial configurada.`)
-              await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
+              await supabase.from('contatos_campanha').update({ status: 'erro', mensagem_enviada: 'Credencial SMTP não vinculada à campanha' }).eq('id', contato.id)
             } else {
               const { data: credData, error: credErr } = await supabase
                 .from('email_credentials')
@@ -555,7 +555,7 @@ async function processarDisparo() {
 
               if (credErr || !credData) {
                 console.error(`[disparo-cron] Credencial ${campanha.email_credential_id} não encontrada:`, credErr)
-                await supabase.from('contatos_campanha').update({ status: 'erro' }).eq('id', contato.id)
+                await supabase.from('contatos_campanha').update({ status: 'erro', mensagem_enviada: 'Credencial SMTP não encontrada' }).eq('id', contato.id)
               } else {
                 const cred = credData as EmailCredential
                 const assuntoFinal = aplicarVariaveis(campanha.email_assunto || campanha.mensagem || 'Sem assunto', contato)
@@ -579,6 +579,7 @@ async function processarDisparo() {
                     .from('contatos_campanha')
                     .update({
                       status: 'erro',
+                      mensagem_enviada: envio.erro || 'Falha no envio SMTP',
                     })
                     .eq('id', contato.id)
                 }
