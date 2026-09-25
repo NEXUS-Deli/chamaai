@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Trash2, Plus, Mail, Loader2, Save, CheckCircle2 } from "lucide-react";
+import { Trash2, Plus, Mail, Loader2, Save, CheckCircle2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 interface EmailCredential {
@@ -22,6 +22,7 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     host: "",
@@ -75,6 +76,45 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
       return toast.error("Preencha todos os campos obrigatórios.");
     }
     
+    if (editingId) {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("email_credentials")
+        .update({
+          host: formData.host.trim(),
+          port: parseInt(formData.port),
+          username: formData.username.trim(),
+          password: formData.password,
+          from_name: formData.from_name.trim(),
+          from_email: formData.from_email.trim(),
+          encryption: formData.encryption,
+          atualizado_em: new Date().toISOString(),
+        })
+        .eq("id", editingId)
+        .select("id, host, port, username, from_name, from_email, encryption")
+        .single();
+
+      if (error) {
+        toast.error("Erro ao atualizar: " + error.message);
+      } else if (data) {
+        toast.success("Credencial atualizada com sucesso!");
+        setCredentials(credentials.map(c => c.id === editingId ? data : c));
+        setAdding(false);
+        setEditingId(null);
+        setFormData({
+          host: "",
+          port: "465",
+          username: "",
+          password: "",
+          from_name: "",
+          from_email: "",
+          encryption: "ssl",
+        });
+      }
+      setLoading(false);
+      return;
+    }
+
     if (credentials.length >= 10) {
       return toast.error("Você atingiu o limite máximo de 10 credenciais de e-mail.");
     }
@@ -87,12 +127,12 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
       .from("email_credentials")
       .insert({
         usuario_id: u.user.id,
-        host: formData.host,
+        host: formData.host.trim(),
         port: parseInt(formData.port),
-        username: formData.username,
+        username: formData.username.trim(),
         password: formData.password,
-        from_name: formData.from_name,
-        from_email: formData.from_email,
+        from_name: formData.from_name.trim(),
+        from_email: formData.from_email.trim(),
         encryption: formData.encryption,
       })
       .select("id, host, port, username, from_name, from_email, encryption")
@@ -104,6 +144,7 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
       toast.success("Credencial de e-mail salva com sucesso!");
       setCredentials([...credentials, data]);
       setAdding(false);
+      setEditingId(null);
       setFormData({
         host: "",
         port: "465",
@@ -114,6 +155,28 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
         encryption: "ssl",
       });
     }
+    setLoading(false);
+  };
+
+  const handleEdit = async (cred: EmailCredential) => {
+    // Busca a senha atual salva para preencher o formulário de edição
+    setLoading(true);
+    const { data } = await supabase
+      .from("email_credentials")
+      .select("password")
+      .eq("id", cred.id)
+      .single();
+    setFormData({
+      host: cred.host,
+      port: String(cred.port),
+      username: cred.username,
+      password: data?.password ?? "",
+      from_name: cred.from_name,
+      from_email: cred.from_email,
+      encryption: cred.encryption ?? "ssl",
+    });
+    setEditingId(cred.id);
+    setAdding(true);
     setLoading(false);
   };
 
@@ -180,7 +243,9 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
 
           {adding && (
             <Card className="p-4 border-primary bg-primary/5 space-y-4">
-              <h3 className="font-semibold text-sm">Adicionar nova credencial</h3>
+              <h3 className="font-semibold text-sm">
+                {editingId ? "Editar credencial" : "Adicionar nova credencial"}
+              </h3>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs">Servidor SMTP (Host)</label>
@@ -246,10 +311,10 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
                   {testing ? "Testando..." : "Testar Conexão"}
                 </Button>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setAdding(false)}>Cancelar</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setAdding(false); setEditingId(null); }}>Cancelar</Button>
                   <Button size="sm" onClick={handleSave} disabled={loading || testing}>
                     {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                    Salvar
+                    {editingId ? "Atualizar" : "Salvar"}
                   </Button>
                 </div>
               </div>
@@ -276,9 +341,14 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
                   <p className="font-semibold text-sm">{cred.from_name} <span className="text-muted-foreground font-normal">({cred.from_email})</span></p>
                   <p className="text-xs text-muted-foreground font-mono mt-1">SMTP: {cred.host}:{cred.port}</p>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => handleDelete(cred.id)} disabled={loading}>
-                  <Trash2 className="w-4 h-4 text-destructive" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => handleEdit(cred)} disabled={loading} title="Editar">
+                    <Pencil className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => handleDelete(cred.id)} disabled={loading} title="Excluir">
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                </div>
               </Card>
             ))}
           </div>

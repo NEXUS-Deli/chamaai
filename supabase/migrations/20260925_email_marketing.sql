@@ -28,6 +28,6 @@ CREATE TABLE public.email_templates (
 
 -- Modificações na tabela de campanhas para suportar EMAIL
 ALTER TABLE public.campanhas ADD COLUMN tipo_campanha text DEFAULT 'WHATSAPP';
-ALTER TABLE public.campanhas ADD COLUMN email_credential_id uuid REFERENCES public.email_credentials(id);
+ALTER TABLE public.campanhas ADD COLUMN email_credential_id uuid REFERENCES public.email_credentials(id) ON DELETE SET NULL;
 ALTER TABLE public.campanhas ADD COLUMN email_assunto text;
 ALTER TABLE public.campanhas ADD COLUMN email_conteudo_html text;
