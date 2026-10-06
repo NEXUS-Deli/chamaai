@@ -3,55 +3,29 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Mail, Lock, ArrowRight, User } from "lucide-react";
+import { Loader2, Eye, EyeOff, ArrowUpRight } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
+import { LEMBRAR_KEY, SESSAO_KEY } from "@/lib/lembrar-sessao";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
   component: AuthPage,
 });
 
-const SLIDES = [
-  {
-    img: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1400&q=80",
-    title: "Pizzas Irresistíveis",
-    desc: "Recupere aquele cliente de pizza de domingo automaticamente com ofertas irresistíveis direto no WhatsApp.",
-    tags: ["Mais pedidos", "Mais clientes", "Mais vendas"],
-  },
-  {
-    img: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1400&q=80",
-    title: "Hambúrgueres Artesanais",
-    desc: "Dispare promoções de fim de semana e lote sua hamburgueria toda sexta-feira com um único clique.",
-    tags: ["Fidelização", "Retenção", "Crescimento"],
-  },
-  {
-    img: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=1400&q=80",
-    title: "Sushi & Japonesa",
-    desc: "Comunique novidades do cardápio e combos exclusivos diretamente no WhatsApp dos seus clientes.",
-    tags: ["Cardápio digital", "Combos", "Promoções"],
-  },
-  {
-    img: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=1400&q=80",
-    title: "Churrascaria & Grill",
-    desc: "Aumente o ticket médio com disparos segmentados antes do fim de semana para sua base de clientes.",
-    tags: ["Ticket médio", "Engajamento", "WhatsApp"],
-  },
-];
+// Central de Vendas (WhatsApp) — contas são criadas pela equipe comercial
+const WHATSAPP_VENDAS = "5543999572256";
+const linkWhatsApp = (mensagem: string) =>
+  `https://wa.me/${WHATSAPP_VENDAS}?text=${encodeURIComponent(mensagem)}`;
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode]       = useState<"login" | "signup">("login");
-  const [email, setEmail]     = useState("");
-  const [senha, setSenha]     = useState("");
-  const [nome, setNome]       = useState("");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [lembrar, setLembrar] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [slide, setSlide]     = useState(0);
-
-  useEffect(() => {
-    const t = setInterval(() => setSlide((s) => (s + 1) % SLIDES.length), 5000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -59,237 +33,108 @@ function AuthPage() {
     });
   }, [navigate]);
 
-  const switchMode = (next: "login" | "signup") => {
-    setMode(next);
-    setEmail(""); setSenha(""); setNome("");
-  };
-
   const handleLogin = async (e: { preventDefault(): void }) => {
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
     setLoading(false);
-    if (error) return toast.error(error.message);
+    if (error) {
+      return toast.error(error.message === "Invalid login credentials" ? "E-mail ou senha incorretos." : error.message);
+    }
+    // "Lembrar de mim" desmarcado: a sessão termina quando o navegador for fechado
+    try {
+      localStorage.setItem(LEMBRAR_KEY, lembrar ? "1" : "0");
+      sessionStorage.setItem(SESSAO_KEY, "1");
+    } catch { /* armazenamento indisponível: mantém o comportamento padrão */ }
     toast.success("Bem-vindo!");
     navigate({ to: "/dashboard", replace: true });
   };
 
-  const handleSignup = async (e: { preventDefault(): void }) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password: senha,
-      options: { emailRedirectTo: window.location.origin, data: { nome } },
-    });
-    setLoading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Conta criada! Você já pode entrar.");
-    switchMode("login");
-  };
-
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="min-h-screen bg-surface p-3 sm:p-8 lg:p-12 flex">
+      <div className="flex-1 flex flex-col bg-card rounded-xl border shadow-sm overflow-hidden">
+        {/* Barra superior com a logo */}
+        <header className="h-16 sm:h-20 px-6 sm:px-10 flex items-center border-b shrink-0">
+          <BrandLogo className="h-8 sm:h-9 w-auto max-w-[180px]" />
+        </header>
 
-      {/* ── ESQUERDA: carrossel de imagens (oculto em mobile) ── */}
-      <div className="hidden lg:block relative shrink-0" style={{ width: "65%" }}>
+        {/* Formulário centralizado */}
+        <main className="flex-1 flex items-center justify-center px-6 py-12">
+          <div className="w-full max-w-md">
+            <h1 className="text-2xl font-bold">Login</h1>
+            <p className="text-sm text-muted-foreground">Olá, bem-vindo de volta 👋</p>
 
-        {SLIDES.map((s, i) => (
-          <div
-            key={i}
-            className={`absolute inset-0 transition-opacity duration-1000 ${
-              i === slide ? "opacity-100" : "opacity-0"
-            }`}
-          >
-            <img
-              src={s.img}
-              alt={s.title}
-              className="w-full h-full object-cover"
-              loading={i === 0 ? "eager" : "lazy"}
-            />
-          </div>
-        ))}
+            <form onSubmit={handleLogin} className="mt-6 space-y-4">
+              <div className="space-y-1.5">
+                <label htmlFor="email" className="text-sm font-medium">E-mail</label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="Ex.: voce@empresa.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10 pointer-events-none" />
+              <div className="space-y-1.5">
+                <label htmlFor="senha" className="text-sm font-medium">Senha</label>
+                <div className="relative">
+                  <Input
+                    id="senha"
+                    type={mostrarSenha ? "text" : "password"}
+                    required
+                    autoComplete="current-password"
+                    placeholder="Digite sua senha"
+                    value={senha}
+                    onChange={(e) => setSenha(e.target.value)}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarSenha((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground"
+                    aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+                  >
+                    {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
 
-        <div className="absolute bottom-0 left-0 right-0 px-12 pb-12">
-          <div className="flex gap-2 mb-6">
-            {SLIDES.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setSlide(i)}
-                className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i === slide ? "w-7 bg-primary" : "w-2 bg-white/35 hover:bg-white/60"
-                }`}
-              />
-            ))}
-          </div>
+              <div className="flex items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <Checkbox checked={lembrar} onCheckedChange={(v) => setLembrar(v === true)} />
+                  Lembrar de mim
+                </label>
+                <a
+                  href={linkWhatsApp("Olá! Esqueci minha senha do Prospecta 360. Pode me ajudar?")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-brand hover:underline"
+                >
+                  Esqueceu a senha?
+                </a>
+              </div>
 
-          <div className="relative h-44">
-            {SLIDES.map((s, i) => (
-              <div
-                key={i}
-                className={`absolute top-0 left-0 w-full transition-opacity duration-700 ${
-                  i === slide ? "opacity-100" : "opacity-0 pointer-events-none"
-                }`}
+              <Button type="submit" disabled={loading} className="w-full">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Entrar"}
+              </Button>
+            </form>
+
+            <p className="text-center text-sm text-muted-foreground mt-6">
+              Ainda não tem uma conta?{" "}
+              <a
+                href={linkWhatsApp("Olá! Quero contratar o Prospecta 360.")}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 font-medium text-brand hover:underline"
               >
-                <h2 className="text-4xl font-bold text-white mb-3 leading-tight">{s.title}</h2>
-                <p className="text-base text-white/75 mb-5 max-w-md leading-relaxed">{s.desc}</p>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {s.tags.map((t, ti) => (
-                    <span key={t} className="flex items-center gap-1.5">
-                      {ti > 0 && <span className="text-white/30 text-sm">·</span>}
-                      <span className="text-sm font-semibold text-white/80">{t}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
+                Criar uma conta <ArrowUpRight className="w-4 h-4" />
+              </a>
+            </p>
           </div>
-        </div>
-      </div>
-
-      {/* ── DIREITA: formulário ── */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 sm:px-12">
-        <div className="w-full max-w-sm">
-
-          <div className="flex justify-center mb-8">
-            <BrandLogo className="h-14 w-auto max-w-[280px]" />
-          </div>
-
-          {mode === "login" ? (
-            <>
-              <div className="mb-7 text-center">
-                <h1 className="text-2xl font-bold">Dispare, venda e cresça.</h1>
-                <p className="text-sm text-muted-foreground">Faça login abaixo com as suas credenciais</p>
-              </div>
-
-              <form onSubmit={handleLogin} className="space-y-5">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    E-mail
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      type="email"
-                      required
-                      placeholder="seu@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    Senha
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      value={senha}
-                      onChange={(e) => setSenha(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                <Button type="submit" disabled={loading} className="w-full gap-2 h-11 text-base rounded-xl">
-                  {loading
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <><span>Entrar na Plataforma</span><ArrowRight className="w-4 h-4" /></>
-                  }
-                </Button>
-              </form>
-
-              <p className="text-center text-sm text-muted-foreground mt-8">
-                Não tem uma conta?{" "}
-                <button onClick={() => switchMode("signup")} className="text-brand font-semibold hover:underline">
-                  Criar conta
-                </button>
-              </p>
-            </>
-          ) : (
-            <>
-              <div className="mb-7 text-center">
-                <h1 className="text-2xl font-bold">Criar conta</h1>
-                <p className="text-sm text-muted-foreground">Preencha os dados abaixo para começar</p>
-              </div>
-
-              <form onSubmit={handleSignup} className="space-y-5">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    Nome
-                  </label>
-                  <div className="relative">
-                    <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      required
-                      placeholder="Seu nome"
-                      value={nome}
-                      onChange={(e) => setNome(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    E-mail
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      type="email"
-                      required
-                      placeholder="seu@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    Senha
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      type="password"
-                      required
-                      minLength={6}
-                      placeholder="••••••••"
-                      value={senha}
-                      onChange={(e) => setSenha(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                <Button type="submit" disabled={loading} className="w-full gap-2 h-11 text-base rounded-xl">
-                  {loading
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <><span>Criar conta</span><ArrowRight className="w-4 h-4" /></>
-                  }
-                </Button>
-              </form>
-
-              <p className="text-center text-sm text-muted-foreground mt-8">
-                Já tenho uma conta.{" "}
-                <button onClick={() => switchMode("login")} className="text-brand font-semibold hover:underline">
-                  Entrar
-                </button>
-              </p>
-            </>
-          )}
-        </div>
+        </main>
       </div>
     </div>
   );

@@ -9,62 +9,47 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
-import { Route as AuthenticatedStoriesRouteImport } from './routes/_authenticated/stories'
-import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
-import { Route as AuthenticatedFerramentasIndexRouteImport } from './routes/_authenticated/ferramentas.index'
-import { Route as AuthenticatedEmailMarketingIndexRouteImport } from './routes/_authenticated/email-marketing.index'
-import { Route as AuthenticatedCampanhasIndexRouteImport } from './routes/_authenticated/campanhas.index'
+import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
+import { Route as AuthenticatedStoriesRouteImport } from './routes/_authenticated/stories'
+import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
 import { Route as AuthenticatedAtendimentoIaIndexRouteImport } from './routes/_authenticated/atendimento-ia.index'
-import { Route as AuthenticatedFerramentasVerificadorRouteImport } from './routes/_authenticated/ferramentas.verificador'
-import { Route as AuthenticatedFerramentasImportadorRouteImport } from './routes/_authenticated/ferramentas.importador'
-import { Route as AuthenticatedFerramentasExtratorRouteImport } from './routes/_authenticated/ferramentas.extrator'
-import { Route as AuthenticatedFerramentasBlacklistRouteImport } from './routes/_authenticated/ferramentas.blacklist'
-import { Route as AuthenticatedEmailMarketingNovaRouteImport } from './routes/_authenticated/email-marketing.nova'
-import { Route as AuthenticatedEmailMarketingIdRouteImport } from './routes/_authenticated/email-marketing.$id'
-import { Route as AuthenticatedCampanhasNovaRouteImport } from './routes/_authenticated/campanhas.nova'
-import { Route as AuthenticatedCampanhasIdRouteImport } from './routes/_authenticated/campanhas.$id'
-import { Route as AuthenticatedAtendimentoIaNovaRouteImport } from './routes/_authenticated/atendimento-ia.nova'
 import { Route as AuthenticatedAtendimentoIaIdRouteImport } from './routes/_authenticated/atendimento-ia.$id'
+import { Route as AuthenticatedAtendimentoIaNovaRouteImport } from './routes/_authenticated/atendimento-ia.nova'
+import { Route as AuthenticatedCampanhasIndexRouteImport } from './routes/_authenticated/campanhas.index'
+import { Route as AuthenticatedCampanhasIdRouteImport } from './routes/_authenticated/campanhas.$id'
+import { Route as AuthenticatedCampanhasNovaRouteImport } from './routes/_authenticated/campanhas.nova'
+import { Route as AuthenticatedEmailMarketingIndexRouteImport } from './routes/_authenticated/email-marketing.index'
+import { Route as AuthenticatedEmailMarketingIdRouteImport } from './routes/_authenticated/email-marketing.$id'
+import { Route as AuthenticatedEmailMarketingNovaRouteImport } from './routes/_authenticated/email-marketing.nova'
+import { Route as AuthenticatedFerramentasIndexRouteImport } from './routes/_authenticated/ferramentas.index'
+import { Route as AuthenticatedFerramentasBlacklistRouteImport } from './routes/_authenticated/ferramentas.blacklist'
+import { Route as AuthenticatedFerramentasExtratorRouteImport } from './routes/_authenticated/ferramentas.extrator'
+import { Route as AuthenticatedFerramentasImportadorRouteImport } from './routes/_authenticated/ferramentas.importador'
+import { Route as AuthenticatedFerramentasVerificadorRouteImport } from './routes/_authenticated/ferramentas.verificador'
 
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedTemplatesRoute = AuthenticatedTemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedStoriesRoute = AuthenticatedStoriesRouteImport.update({
-  id: '/stories',
-  path: '/stories',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
-  id: '/leads',
-  path: '/leads',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedConfiguracoesRoute =
@@ -73,81 +58,36 @@ const AuthenticatedConfiguracoesRoute =
     path: '/configuracoes',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedFerramentasIndexRoute =
-  AuthenticatedFerramentasIndexRouteImport.update({
-    id: '/ferramentas/',
-    path: '/ferramentas/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedEmailMarketingIndexRoute =
-  AuthenticatedEmailMarketingIndexRouteImport.update({
-    id: '/email-marketing/',
-    path: '/email-marketing/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedCampanhasIndexRoute =
-  AuthenticatedCampanhasIndexRouteImport.update({
-    id: '/campanhas/',
-    path: '/campanhas/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
+const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedStoriesRoute = AuthenticatedStoriesRouteImport.update({
+  id: '/stories',
+  path: '/stories',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTemplatesRoute = AuthenticatedTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAtendimentoIaIndexRoute =
   AuthenticatedAtendimentoIaIndexRouteImport.update({
     id: '/atendimento-ia/',
     path: '/atendimento-ia/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedFerramentasVerificadorRoute =
-  AuthenticatedFerramentasVerificadorRouteImport.update({
-    id: '/ferramentas/verificador',
-    path: '/ferramentas/verificador',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedFerramentasImportadorRoute =
-  AuthenticatedFerramentasImportadorRouteImport.update({
-    id: '/ferramentas/importador',
-    path: '/ferramentas/importador',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedFerramentasExtratorRoute =
-  AuthenticatedFerramentasExtratorRouteImport.update({
-    id: '/ferramentas/extrator',
-    path: '/ferramentas/extrator',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedFerramentasBlacklistRoute =
-  AuthenticatedFerramentasBlacklistRouteImport.update({
-    id: '/ferramentas/blacklist',
-    path: '/ferramentas/blacklist',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedEmailMarketingNovaRoute =
-  AuthenticatedEmailMarketingNovaRouteImport.update({
-    id: '/email-marketing/nova',
-    path: '/email-marketing/nova',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedEmailMarketingIdRoute =
-  AuthenticatedEmailMarketingIdRouteImport.update({
-    id: '/email-marketing/$id',
-    path: '/email-marketing/$id',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedCampanhasNovaRoute =
-  AuthenticatedCampanhasNovaRouteImport.update({
-    id: '/campanhas/nova',
-    path: '/campanhas/nova',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedCampanhasIdRoute =
-  AuthenticatedCampanhasIdRouteImport.update({
-    id: '/campanhas/$id',
-    path: '/campanhas/$id',
+const AuthenticatedAtendimentoIaIdRoute =
+  AuthenticatedAtendimentoIaIdRouteImport.update({
+    id: '/atendimento-ia/$id',
+    path: '/atendimento-ia/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedAtendimentoIaNovaRoute =
@@ -156,10 +96,70 @@ const AuthenticatedAtendimentoIaNovaRoute =
     path: '/atendimento-ia/nova',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedAtendimentoIaIdRoute =
-  AuthenticatedAtendimentoIaIdRouteImport.update({
-    id: '/atendimento-ia/$id',
-    path: '/atendimento-ia/$id',
+const AuthenticatedCampanhasIndexRoute =
+  AuthenticatedCampanhasIndexRouteImport.update({
+    id: '/campanhas/',
+    path: '/campanhas/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedCampanhasIdRoute =
+  AuthenticatedCampanhasIdRouteImport.update({
+    id: '/campanhas/$id',
+    path: '/campanhas/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedCampanhasNovaRoute =
+  AuthenticatedCampanhasNovaRouteImport.update({
+    id: '/campanhas/nova',
+    path: '/campanhas/nova',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEmailMarketingIndexRoute =
+  AuthenticatedEmailMarketingIndexRouteImport.update({
+    id: '/email-marketing/',
+    path: '/email-marketing/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEmailMarketingIdRoute =
+  AuthenticatedEmailMarketingIdRouteImport.update({
+    id: '/email-marketing/$id',
+    path: '/email-marketing/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEmailMarketingNovaRoute =
+  AuthenticatedEmailMarketingNovaRouteImport.update({
+    id: '/email-marketing/nova',
+    path: '/email-marketing/nova',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFerramentasIndexRoute =
+  AuthenticatedFerramentasIndexRouteImport.update({
+    id: '/ferramentas/',
+    path: '/ferramentas/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFerramentasBlacklistRoute =
+  AuthenticatedFerramentasBlacklistRouteImport.update({
+    id: '/ferramentas/blacklist',
+    path: '/ferramentas/blacklist',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFerramentasExtratorRoute =
+  AuthenticatedFerramentasExtratorRouteImport.update({
+    id: '/ferramentas/extrator',
+    path: '/ferramentas/extrator',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFerramentasImportadorRoute =
+  AuthenticatedFerramentasImportadorRouteImport.update({
+    id: '/ferramentas/importador',
+    path: '/ferramentas/importador',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFerramentasVerificadorRoute =
+  AuthenticatedFerramentasVerificadorRouteImport.update({
+    id: '/ferramentas/verificador',
+    path: '/ferramentas/verificador',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 
@@ -321,11 +321,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -335,39 +335,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/templates': {
-      id: '/_authenticated/templates'
-      path: '/templates'
-      fullPath: '/templates'
-      preLoaderRoute: typeof AuthenticatedTemplatesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/stories': {
-      id: '/_authenticated/stories'
-      path: '/stories'
-      fullPath: '/stories'
-      preLoaderRoute: typeof AuthenticatedStoriesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/leads': {
-      id: '/_authenticated/leads'
-      path: '/leads'
-      fullPath: '/leads'
-      preLoaderRoute: typeof AuthenticatedLeadsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/configuracoes': {
@@ -377,32 +356,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedConfiguracoesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/admin': {
-      id: '/_authenticated/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/ferramentas/': {
-      id: '/_authenticated/ferramentas/'
-      path: '/ferramentas'
-      fullPath: '/ferramentas/'
-      preLoaderRoute: typeof AuthenticatedFerramentasIndexRouteImport
+    '/_authenticated/leads': {
+      id: '/_authenticated/leads'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof AuthenticatedLeadsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/email-marketing/': {
-      id: '/_authenticated/email-marketing/'
-      path: '/email-marketing'
-      fullPath: '/email-marketing/'
-      preLoaderRoute: typeof AuthenticatedEmailMarketingIndexRouteImport
+    '/_authenticated/stories': {
+      id: '/_authenticated/stories'
+      path: '/stories'
+      fullPath: '/stories'
+      preLoaderRoute: typeof AuthenticatedStoriesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/campanhas/': {
-      id: '/_authenticated/campanhas/'
-      path: '/campanhas'
-      fullPath: '/campanhas/'
-      preLoaderRoute: typeof AuthenticatedCampanhasIndexRouteImport
+    '/_authenticated/templates': {
+      id: '/_authenticated/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof AuthenticatedTemplatesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/atendimento-ia/': {
@@ -412,60 +391,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAtendimentoIaIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/ferramentas/verificador': {
-      id: '/_authenticated/ferramentas/verificador'
-      path: '/ferramentas/verificador'
-      fullPath: '/ferramentas/verificador'
-      preLoaderRoute: typeof AuthenticatedFerramentasVerificadorRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/ferramentas/importador': {
-      id: '/_authenticated/ferramentas/importador'
-      path: '/ferramentas/importador'
-      fullPath: '/ferramentas/importador'
-      preLoaderRoute: typeof AuthenticatedFerramentasImportadorRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/ferramentas/extrator': {
-      id: '/_authenticated/ferramentas/extrator'
-      path: '/ferramentas/extrator'
-      fullPath: '/ferramentas/extrator'
-      preLoaderRoute: typeof AuthenticatedFerramentasExtratorRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/ferramentas/blacklist': {
-      id: '/_authenticated/ferramentas/blacklist'
-      path: '/ferramentas/blacklist'
-      fullPath: '/ferramentas/blacklist'
-      preLoaderRoute: typeof AuthenticatedFerramentasBlacklistRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/email-marketing/nova': {
-      id: '/_authenticated/email-marketing/nova'
-      path: '/email-marketing/nova'
-      fullPath: '/email-marketing/nova'
-      preLoaderRoute: typeof AuthenticatedEmailMarketingNovaRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/email-marketing/$id': {
-      id: '/_authenticated/email-marketing/$id'
-      path: '/email-marketing/$id'
-      fullPath: '/email-marketing/$id'
-      preLoaderRoute: typeof AuthenticatedEmailMarketingIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/campanhas/nova': {
-      id: '/_authenticated/campanhas/nova'
-      path: '/campanhas/nova'
-      fullPath: '/campanhas/nova'
-      preLoaderRoute: typeof AuthenticatedCampanhasNovaRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/campanhas/$id': {
-      id: '/_authenticated/campanhas/$id'
-      path: '/campanhas/$id'
-      fullPath: '/campanhas/$id'
-      preLoaderRoute: typeof AuthenticatedCampanhasIdRouteImport
+    '/_authenticated/atendimento-ia/$id': {
+      id: '/_authenticated/atendimento-ia/$id'
+      path: '/atendimento-ia/$id'
+      fullPath: '/atendimento-ia/$id'
+      preLoaderRoute: typeof AuthenticatedAtendimentoIaIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/atendimento-ia/nova': {
@@ -475,11 +405,81 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAtendimentoIaNovaRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/atendimento-ia/$id': {
-      id: '/_authenticated/atendimento-ia/$id'
-      path: '/atendimento-ia/$id'
-      fullPath: '/atendimento-ia/$id'
-      preLoaderRoute: typeof AuthenticatedAtendimentoIaIdRouteImport
+    '/_authenticated/campanhas/': {
+      id: '/_authenticated/campanhas/'
+      path: '/campanhas'
+      fullPath: '/campanhas/'
+      preLoaderRoute: typeof AuthenticatedCampanhasIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/campanhas/$id': {
+      id: '/_authenticated/campanhas/$id'
+      path: '/campanhas/$id'
+      fullPath: '/campanhas/$id'
+      preLoaderRoute: typeof AuthenticatedCampanhasIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/campanhas/nova': {
+      id: '/_authenticated/campanhas/nova'
+      path: '/campanhas/nova'
+      fullPath: '/campanhas/nova'
+      preLoaderRoute: typeof AuthenticatedCampanhasNovaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/email-marketing/': {
+      id: '/_authenticated/email-marketing/'
+      path: '/email-marketing'
+      fullPath: '/email-marketing/'
+      preLoaderRoute: typeof AuthenticatedEmailMarketingIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/email-marketing/$id': {
+      id: '/_authenticated/email-marketing/$id'
+      path: '/email-marketing/$id'
+      fullPath: '/email-marketing/$id'
+      preLoaderRoute: typeof AuthenticatedEmailMarketingIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/email-marketing/nova': {
+      id: '/_authenticated/email-marketing/nova'
+      path: '/email-marketing/nova'
+      fullPath: '/email-marketing/nova'
+      preLoaderRoute: typeof AuthenticatedEmailMarketingNovaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ferramentas/': {
+      id: '/_authenticated/ferramentas/'
+      path: '/ferramentas'
+      fullPath: '/ferramentas/'
+      preLoaderRoute: typeof AuthenticatedFerramentasIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ferramentas/blacklist': {
+      id: '/_authenticated/ferramentas/blacklist'
+      path: '/ferramentas/blacklist'
+      fullPath: '/ferramentas/blacklist'
+      preLoaderRoute: typeof AuthenticatedFerramentasBlacklistRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ferramentas/extrator': {
+      id: '/_authenticated/ferramentas/extrator'
+      path: '/ferramentas/extrator'
+      fullPath: '/ferramentas/extrator'
+      preLoaderRoute: typeof AuthenticatedFerramentasExtratorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ferramentas/importador': {
+      id: '/_authenticated/ferramentas/importador'
+      path: '/ferramentas/importador'
+      fullPath: '/ferramentas/importador'
+      preLoaderRoute: typeof AuthenticatedFerramentasImportadorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ferramentas/verificador': {
+      id: '/_authenticated/ferramentas/verificador'
+      path: '/ferramentas/verificador'
+      fullPath: '/ferramentas/verificador'
+      preLoaderRoute: typeof AuthenticatedFerramentasVerificadorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
   }
