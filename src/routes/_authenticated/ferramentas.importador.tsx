@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, ArrowDownToLine, CheckCircle2, RefreshCw, BookUser, PhoneCall } from "lucide-react";
 import { toast } from "sonner";
-import { FerramentasNav } from "@/components/ferramentas-nav";
+import { FerramentasHeader } from "@/components/ferramentas-nav";
 
 export const Route = createFileRoute("/_authenticated/ferramentas/importador")({
   component: Importador,
@@ -159,14 +159,7 @@ function Importador() {
 
   return (
     <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Importador de Contatos</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Importe os contatos do WhatsApp diretamente para uma pasta dentro da Chama AI.
-        </p>
-      </div>
-
-      <FerramentasNav active="importador" />
+      <FerramentasHeader active="importador" />
 
       <Card className="p-6 space-y-5">
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -174,7 +167,7 @@ function Importador() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Instância WhatsApp</label>
             {instancias.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma instância. Configure em <span className="text-primary">Conexões</span>.</p>
+              <p className="text-sm text-muted-foreground">Nenhuma instância. Configure em <span className="text-brand">Conexões</span>.</p>
             ) : (
               <Select value={instanciaId} onValueChange={setInstanciaId}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
@@ -227,7 +220,7 @@ function Importador() {
         <div className="space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <button onClick={toggleTodos} className="text-sm text-primary underline">
+              <button onClick={toggleTodos} className="text-sm text-brand underline">
                 {selecionados.size === contatos.length ? "Desmarcar todos" : "Selecionar todos"}
               </button>
               <span className="text-sm text-muted-foreground">{selecionados.size} de {contatos.length} selecionados</span>
@@ -297,9 +290,9 @@ function Importador() {
       )}
 
       {importados > 0 && (
-        <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-2 text-sm text-success bg-success-subtle border border-success/30 rounded-lg px-4 py-3">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
-          {importados} contatos importados com sucesso para a Chama AI.
+          {importados} contatos importados com sucesso para o Prospecta 360.
         </div>
       )}
     </div>

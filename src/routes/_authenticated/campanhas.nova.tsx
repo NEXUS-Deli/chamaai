@@ -57,7 +57,7 @@ function MidiaThumbUrl({ url, nome, tipo, onRemove }: { url: string; nome: strin
       >
         <X className="w-3 h-3" />
       </button>
-      <div className="absolute bottom-0 left-0 right-0 bg-primary/80 text-[9px] font-semibold text-white text-center py-0.5 leading-none">
+      <div className="absolute bottom-0 left-0 right-0 bg-primary/80 text-[9px] font-semibold text-primary-foreground text-center py-0.5 leading-none">
         template
       </div>
     </div>
@@ -561,7 +561,7 @@ function NovaCampanha() {
         <h1 className="text-2xl font-bold">Nova campanha</h1>
         <div className="flex items-center gap-2 mt-3 text-sm">
           {[1, 2, 3].map((s) => (
-            <div key={s} className={`flex items-center gap-2 ${step >= s ? "text-primary" : "text-muted-foreground"}`}>
+            <div key={s} className={`flex items-center gap-2 ${step >= s ? "text-brand" : "text-muted-foreground"}`}>
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step >= s ? "bg-primary text-primary-foreground" : "bg-muted"}`}>{s}</span>
               {["Configurações", "Contatos", "Revisão"][s - 1]}
               {s < 3 && <ChevronRight className="w-4 h-4" />}
@@ -584,7 +584,7 @@ function NovaCampanha() {
             <div className="space-y-2">
               <Label>Instâncias do WhatsApp <span className="text-xs text-muted-foreground">(selecione uma ou mais — a mensagem sorteará entre elas)</span></Label>
               {instancias.length === 0 && (
-                <p className="text-xs text-red-500">Cadastre instâncias em Configurações.</p>
+                <p className="text-xs text-danger">Cadastre instâncias em Configurações.</p>
               )}
               <div className="flex flex-col gap-2 p-3 border rounded-md">
                 {instancias.map((i) => (
@@ -599,7 +599,7 @@ function NovaCampanha() {
                 ))}
               </div>
               {instanciasSelecionadas.length > 1 && (
-                <p className="text-xs text-green-600 font-medium">
+                <p className="text-xs text-success font-medium">
                   {instanciasSelecionadas.length} instâncias selecionadas — o sistema sorteia qual envia cada mensagem
                 </p>
               )}
@@ -682,13 +682,13 @@ function NovaCampanha() {
                     placeholder={`Variação ${i + 1} — use {nome}, {empresa}, {telefone}`}
                   />
                   <Button type="button" variant="ghost" size="icon" onClick={() => removerVariacao(i)}>
-                    <Trash2 className="w-4 h-4 text-red-500" />
+                    <Trash2 className="w-4 h-4 text-danger" />
                   </Button>
                 </div>
               ))}
 
               {mensagensVariacoes.length > 0 && (
-                <p className="text-xs text-green-600 font-medium">
+                <p className="text-xs text-success font-medium">
                   {mensagensVariacoes.filter(Boolean).length} variação(ões) ativa(s) — a mensagem principal será ignorada
                 </p>
               )}
@@ -766,7 +766,7 @@ function NovaCampanha() {
               )}
 
               {totalMidias > 0 && (
-                <p className="text-xs text-green-600 font-medium">
+                <p className="text-xs text-success font-medium">
                   {totalMidias} mídia(s) — o sistema sorteia qual será enviada para cada contato
                 </p>
               )}
@@ -800,9 +800,9 @@ function NovaCampanha() {
                       <Loader2 className="w-3 h-3 animate-spin" /> Verificando histórico…
                     </span>
                   ) : totalExcluidos > 0 ? (
-                    <span className="text-orange-600">{totalExcluidos} contato(s) excluído(s) por já terem recebido mensagem</span>
+                    <span className="text-warning">{totalExcluidos} contato(s) excluído(s) por já terem recebido mensagem</span>
                   ) : (
-                    <span className="text-green-600">Nenhum contato da lista foi contactado anteriormente</span>
+                    <span className="text-success">Nenhum contato da lista foi contactado anteriormente</span>
                   )}
                 </p>
               )}
@@ -824,7 +824,7 @@ function NovaCampanha() {
                   <p className="font-medium">
                     {contatosCSV.length} contatos válidos
                     {excluirJaContactados && totalExcluidos > 0 && (
-                      <span className="text-orange-600 font-normal ml-1.5">→ {totalContatos} serão disparados ({totalExcluidos} excluídos)</span>
+                      <span className="text-warning font-normal ml-1.5">→ {totalContatos} serão disparados ({totalExcluidos} excluídos)</span>
                     )}
                     . Prévia:
                   </p>
@@ -833,7 +833,7 @@ function NovaCampanha() {
                       <li key={i} className={excluirJaContactados && jaContactados.has(c.telefone) ? "line-through opacity-50" : ""}>
                         {c.telefone} — {c.nome || "—"}
                         {excluirJaContactados && jaContactados.has(c.telefone) && (
-                          <span className="ml-1.5 text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 px-1.5 py-0.5 rounded font-medium">já contactado</span>
+                          <span className="ml-1.5 text-[10px] bg-warning-subtle text-warning   px-1.5 py-0.5 rounded font-medium">já contactado</span>
                         )}
                       </li>
                     ))}
@@ -916,16 +916,16 @@ function NovaCampanha() {
                           <span className="text-sm w-32">{l.telefone}</span>
                           <span className="text-sm text-muted-foreground flex-1">{l.nome || "Sem nome"}</span>
                           {jaFoiContactado && (
-                            <span className="text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 px-1.5 py-0.5 rounded font-medium shrink-0">já contactado</span>
+                            <span className="text-[10px] bg-warning-subtle text-warning   px-1.5 py-0.5 rounded font-medium shrink-0">já contactado</span>
                           )}
                         </label>
                       );
                     })}
                   </div>
-                  <p className="text-sm font-medium text-primary">
+                  <p className="text-sm font-medium text-brand">
                     Selecionados: {leadsSel.length}
                     {excluirJaContactados && totalExcluidos > 0 && (
-                      <span className="text-orange-600 font-normal ml-1.5">({totalExcluidos} excluídos do disparo)</span>
+                      <span className="text-warning font-normal ml-1.5">({totalExcluidos} excluídos do disparo)</span>
                     )}
                   </p>
                 </div>
@@ -933,10 +933,10 @@ function NovaCampanha() {
             </TabsContent>
 
             <TabsContent value="grupos" className="space-y-4 mt-4">
-              <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-900">
+              <div className="flex items-start gap-3 p-3 bg-info-subtle  rounded-lg border border-info/30 ">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Disparo para Grupos</p>
-                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                  <p className="text-sm font-medium text-info ">Disparo para Grupos</p>
+                  <p className="text-xs text-info  mt-0.5">
                     A mensagem será enviada diretamente nos grupos que a instância selecionada participa. Certifique-se de selecionar apenas 1 instância no Passo 1.
                   </p>
                 </div>
@@ -956,7 +956,7 @@ function NovaCampanha() {
                   )}
                 </Button>
                 {instanciasSelecionadas.length === 0 && (
-                  <p className="text-xs text-orange-600">Selecione uma instância no Passo 1 primeiro.</p>
+                  <p className="text-xs text-warning">Selecione uma instância no Passo 1 primeiro.</p>
                 )}
               </div>
 
@@ -989,7 +989,7 @@ function NovaCampanha() {
                       </label>
                     ))}
                   </div>
-                  <p className="text-sm font-medium text-primary">
+                  <p className="text-sm font-medium text-brand">
                     Selecionados: {gruposSel.length} grupo(s)
                   </p>
                 </div>
@@ -1008,7 +1008,7 @@ function NovaCampanha() {
                 <Label className="text-muted-foreground">Instâncias selecionadas</Label>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {instSelecionadasNomes.map((n) => (
-                    <span key={n} className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">{n}</span>
+                    <span key={n} className="px-2 py-0.5 text-xs bg-primary/10 text-brand rounded-full">{n}</span>
                   ))}
                 </div>
               </div>
@@ -1022,7 +1022,7 @@ function NovaCampanha() {
               </div>
               <div>
                 <Label className="text-muted-foreground">{origem === "grupos" ? "Grupos selecionados" : "Contatos"}</Label>
-                <p className="font-bold text-primary">
+                <p className="font-bold text-brand">
                   {origem === "grupos" ? gruposSel.length : totalContatos}
                 </p>
               </div>
@@ -1038,7 +1038,7 @@ function NovaCampanha() {
                       <span key={`f-${i}`} className="text-xs bg-muted px-2 py-0.5 rounded truncate max-w-[140px]">{f.name}</span>
                     ))}
                     {midiasTemplates.map((t, i) => (
-                      <span key={`t-${i}`} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded truncate max-w-[140px]">{t.nome}</span>
+                      <span key={`t-${i}`} className="text-xs bg-primary/10 text-brand px-2 py-0.5 rounded truncate max-w-[140px]">{t.nome}</span>
                     ))}
                   </div>
                 )}
@@ -1105,7 +1105,7 @@ function NovaCampanha() {
                               const config = configsMassa[dateStr] || { horarioInicio, horarioFim, pastas: [] };
                               return (
                                 <Card key={dateStr} className="p-4 space-y-3">
-                                  <div className="font-semibold text-primary">{format(date, "EEEE, dd 'de' MMMM", { locale: ptBR })}</div>
+                                  <div className="font-semibold text-brand">{format(date, "EEEE, dd 'de' MMMM", { locale: ptBR })}</div>
                                   <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                       <Label className="text-xs text-muted-foreground">Horário início</Label>
@@ -1353,7 +1353,7 @@ function LoadMidiaTemplateModal({
       <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-primary" /> Selecionar mídias dos templates
+            <Layers className="w-5 h-5 text-brand" /> Selecionar mídias dos templates
           </DialogTitle>
           <p className="text-sm text-muted-foreground">
             Selecione até {limite} mídia(s). Já adicionadas: {jaAdicionadas.length}.
@@ -1400,7 +1400,7 @@ function LoadMidiaTemplateModal({
                     )}
                     {sel && (
                       <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                        <Check className="w-3 h-3 text-white" />
+                        <Check className="w-3 h-3 text-primary-foreground" />
                       </div>
                     )}
                     <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-1.5 py-1">
@@ -1475,7 +1475,7 @@ function LoadTemplateModal({
       <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-primary" /> Carregar variações do template
+            <Layers className="w-5 h-5 text-brand" /> Carregar variações do template
           </DialogTitle>
           <p className="text-sm text-muted-foreground">
             Selecione um template — suas mensagens substituirão as variações atuais.
@@ -1514,7 +1514,7 @@ function LoadTemplateModal({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-sm">{t.nome}</span>
-                          <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-semibold">
+                          <span className="text-xs bg-primary/10 text-brand px-1.5 py-0.5 rounded-full font-semibold">
                             {t.variacoes.length} msgs
                           </span>
                         </div>

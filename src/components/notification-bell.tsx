@@ -26,10 +26,10 @@ interface Notificacao {
 }
 
 const TIPO_CONFIG = {
-  info:    { icon: Info,          color: "text-blue-500",       bg: "bg-blue-50 dark:bg-blue-950/30" },
-  sucesso: { icon: CheckCircle2,  color: "text-green-500",      bg: "bg-green-50 dark:bg-green-950/30" },
-  erro:    { icon: XCircle,       color: "text-destructive",    bg: "bg-red-50 dark:bg-red-950/30" },
-  aviso:   { icon: AlertTriangle, color: "text-yellow-500",     bg: "bg-yellow-50 dark:bg-yellow-950/30" },
+  info:    { icon: Info,          color: "text-info",       bg: "bg-info-subtle " },
+  sucesso: { icon: CheckCircle2,  color: "text-success",      bg: "bg-success-subtle " },
+  erro:    { icon: XCircle,       color: "text-destructive",    bg: "bg-danger-subtle " },
+  aviso:   { icon: AlertTriangle, color: "text-warning",     bg: "bg-warning-subtle " },
 };
 
 export function NotificationBell({ collapsed = false }: { collapsed?: boolean }) {
@@ -153,14 +153,14 @@ export function NotificationBell({ collapsed = false }: { collapsed?: boolean })
         <div className="relative shrink-0">
           <Bell className="w-4 h-4" />
           {naoLidas > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
+            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-destructive-foreground text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
               {naoLidas > 9 ? "9+" : naoLidas}
             </span>
           )}
         </div>
         {!collapsed && <span className="text-sm font-medium flex-1 text-left">Notificações</span>}
         {!collapsed && naoLidas > 0 && (
-          <span className="text-xs font-semibold bg-destructive text-white rounded-full px-1.5 py-0.5 leading-none">
+          <span className="text-xs font-semibold bg-destructive text-destructive-foreground rounded-full px-1.5 py-0.5 leading-none">
             {naoLidas}
           </span>
         )}

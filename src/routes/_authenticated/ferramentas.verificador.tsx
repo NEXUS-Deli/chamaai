@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CheckCircle2, XCircle, Loader2, PhoneCall, Download, BookmarkPlus, AlertCircle, Users, FolderPlus, Folder, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { FerramentasNav } from "@/components/ferramentas-nav";
+import { FerramentasHeader } from "@/components/ferramentas-nav";
 import { downloadCSV } from "@/lib/csv";
 
 export const Route = createFileRoute("/_authenticated/ferramentas/verificador")({
@@ -351,137 +351,145 @@ function Verificador() {
 
   return (
     <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Verificador de WhatsApp</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Valide números de telefone para saber se possuem WhatsApp ativo.
-        </p>
-      </div>
+      <FerramentasHeader active="verificador" />
 
-      <FerramentasNav active="verificador" />
-
-      <Card className="p-6 space-y-5">
-        <div className="space-y-2 max-w-xs">
-          <label className="text-sm font-medium">Instância WhatsApp</label>
-          {instancias.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhuma instância conectada. Configure em <span className="text-primary">Conexões</span>.
-            </p>
-          ) : (
-            <Select value={instanciaId} onValueChange={setInstanciaId}>
-              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-              <SelectContent>
-                {instancias.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>{i.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          <label className="text-sm font-medium">Números a verificar</label>
-          <Tabs value={origem} onValueChange={(v) => trocarOrigem(v as Origem)}>
-            <TabsList>
-              <TabsTrigger value="colar">Colar números</TabsTrigger>
-              <TabsTrigger value="pasta">Selecionar por pasta</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {origem === "colar" ? (
-            <div className="space-y-2">
-              <Textarea
-                placeholder={"5511912345678\n5521987654321\n11998765432"}
-                value={numeros}
-                onChange={(e) => setNumeros(e.target.value)}
-                rows={8}
-                className="font-mono text-sm resize-none"
-              />
-              <p className="text-xs text-muted-foreground">
-                Um número por linha (ou separados por vírgula). Com ou sem o código do país — o sistema adiciona{" "}
-                <code className="bg-muted px-1 rounded">55</code> automaticamente para números brasileiros de 10 ou 11 dígitos.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {pastas.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma pasta criada ainda. Crie pastas em <span className="text-primary">Clientes/Leads</span>.</p>
-              ) : (
-                <div className="flex flex-wrap gap-4 p-3 bg-muted rounded max-h-40 overflow-y-auto">
-                  {pastas.map((p) => (
-                    <label key={p.id} className="flex items-center gap-2 cursor-pointer text-sm">
-                      <Checkbox
-                        checked={pastasOrigemSel.includes(p.id)}
-                        onCheckedChange={() => togglePastaOrigem(p.id)}
-                      />
-                      <Folder className="w-3.5 h-3.5 text-primary shrink-0" />
-                      {p.nome}
-                    </label>
-                  ))}
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {carregandoLeads
-                  ? "Carregando leads das pastas selecionadas…"
-                  : pastasOrigemSel.length === 0
-                  ? "Selecione ao menos uma pasta."
-                  : `${leadsDaPasta.length} lead(s) encontrado(s) na(s) pasta(s) selecionada(s).`}
-              </p>
-            </div>
-          )}
-        </div>
-
-        <label className="flex items-start gap-2 cursor-pointer">
-          <Checkbox checked={buscarNomes} onCheckedChange={(c) => setBuscarNomes(c === true)} className="mt-0.5" />
-          <span className="text-sm">
-            Também buscar o nome de cada contato
-            <span className="block text-xs text-muted-foreground font-normal">
-              Faz uma busca extra por contato (não tem como fazer em lote). Em listas grandes (centenas/milhares), pode levar vários minutos — mantenha esta aba aberta.
-            </span>
-          </span>
-        </label>
-
-        <Button
-          onClick={verificar}
-          disabled={loading || !instanciaId || carregandoLeads || (origem === "colar" ? !numeros.trim() : leadsDaPasta.length === 0)}
-        >
-          {loading
-            ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Verificando…</>
-            : <><PhoneCall className="w-4 h-4 mr-2" />Verificar números</>}
-        </Button>
-
-        {buscandoNomes && (
-          <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
-            <div className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Buscando nomes: {progressoNomes.feito} / {progressoNomes.total}
-              </span>
-              <Button variant="outline" size="sm" onClick={pararBuscaDeNomes}>Parar</Button>
-            </div>
-            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all"
-                style={{ width: `${progressoNomes.total ? (progressoNomes.feito / progressoNomes.total) * 100 : 0}%` }}
-              />
-            </div>
+      {/* Painéis unidos, no mesmo visual do Dashboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-px bg-border rounded-xl overflow-hidden border">
+        {/* Coluna principal: números */}
+        <div className="bg-card flex flex-col lg:col-span-2">
+          <div className="px-5 py-4 border-b">
+            <h2 className="text-base font-semibold">Números a verificar</h2>
           </div>
-        )}
-      </Card>
+          <div className="p-5 space-y-3 flex-1">
+            <Tabs value={origem} onValueChange={(v) => trocarOrigem(v as Origem)}>
+              <TabsList>
+                <TabsTrigger value="colar">Colar números</TabsTrigger>
+                <TabsTrigger value="pasta">Selecionar por pasta</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            {origem === "colar" ? (
+              <div className="space-y-2">
+                <Textarea
+                  placeholder={"5511912345678\n5521987654321\n11998765432"}
+                  value={numeros}
+                  onChange={(e) => setNumeros(e.target.value)}
+                  rows={10}
+                  className="font-mono text-sm resize-none"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Um número por linha (ou separados por vírgula). Com ou sem o código do país — o sistema adiciona{" "}
+                  <code className="bg-muted px-1 rounded">55</code> automaticamente para números brasileiros de 10 ou 11 dígitos.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {pastas.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhuma pasta criada ainda. Crie pastas em <span className="text-brand">Carteira de Leads</span>.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-4 p-3 bg-muted rounded max-h-40 overflow-y-auto">
+                    {pastas.map((p) => (
+                      <label key={p.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                        <Checkbox
+                          checked={pastasOrigemSel.includes(p.id)}
+                          onCheckedChange={() => togglePastaOrigem(p.id)}
+                        />
+                        <Folder className="w-3.5 h-3.5 text-brand shrink-0" />
+                        {p.nome}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {carregandoLeads
+                    ? "Carregando leads das pastas selecionadas…"
+                    : pastasOrigemSel.length === 0
+                    ? "Selecione ao menos uma pasta."
+                    : `${leadsDaPasta.length} lead(s) encontrado(s) na(s) pasta(s) selecionada(s).`}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Coluna lateral: configuração e ação */}
+        <div className="bg-card flex flex-col">
+          <div className="px-5 py-4 border-b">
+            <h2 className="text-base font-semibold">Configuração</h2>
+          </div>
+          <div className="p-5 flex flex-col gap-5 flex-1">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Instância WhatsApp</label>
+              {instancias.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma instância conectada. Configure em <span className="text-brand">Conexões</span>.
+                </p>
+              ) : (
+                <Select value={instanciaId} onValueChange={setInstanciaId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {instancias.map((i) => (
+                      <SelectItem key={i.id} value={i.id}>{i.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <Checkbox checked={buscarNomes} onCheckedChange={(c) => setBuscarNomes(c === true)} className="mt-0.5" />
+              <span className="text-sm">
+                Também buscar o nome de cada contato
+                <span className="block text-xs text-muted-foreground font-normal">
+                  Faz uma busca extra por contato (não tem como fazer em lote). Em listas grandes (centenas/milhares), pode levar vários minutos — mantenha esta aba aberta.
+                </span>
+              </span>
+            </label>
+
+            <Button
+              className="w-full mt-auto"
+              onClick={verificar}
+              disabled={loading || !instanciaId || carregandoLeads || (origem === "colar" ? !numeros.trim() : leadsDaPasta.length === 0)}
+            >
+              {loading
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Verificando…</>
+                : <><PhoneCall className="w-4 h-4 mr-2" />Verificar números</>}
+            </Button>
+
+            {buscandoNomes && (
+              <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Buscando nomes: {progressoNomes.feito} / {progressoNomes.total}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={pararBuscaDeNomes}>Parar</Button>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all"
+                    style={{ width: `${progressoNomes.total ? (progressoNomes.feito / progressoNomes.total) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {resultados.length > 0 && (
         <div className="space-y-4">
           {/* Resumo e ações */}
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-4 text-sm flex-wrap">
-              <span className="flex items-center gap-1.5 text-green-600 font-medium">
+              <span className="flex items-center gap-1.5 text-success font-medium">
                 <CheckCircle2 className="w-4 h-4" />{comWpp} com WhatsApp
               </span>
               <span className="flex items-center gap-1.5 text-destructive font-medium">
                 <XCircle className="w-4 h-4" />{semWpp} sem WhatsApp
               </span>
               {comErro > 0 && (
-                <span className="flex items-center gap-1.5 text-yellow-600 font-medium">
+                <span className="flex items-center gap-1.5 text-warning font-medium">
                   <AlertCircle className="w-4 h-4" />{comErro} com erro
                 </span>
               )}
@@ -573,15 +581,15 @@ function Verificador() {
                       <td className="px-4 py-2.5 font-mono text-xs">{r.query}</td>
                       <td className="py-2.5">
                         {r.error ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full">
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-warning bg-warning-subtle px-2 py-0.5 rounded-full">
                             <AlertCircle className="w-3 h-3" /> {r.error}
                           </span>
                         ) : r.isInWhatsapp ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-success bg-success-subtle px-2 py-0.5 rounded-full">
                             <CheckCircle2 className="w-3 h-3" /> Com WhatsApp
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-danger bg-danger-subtle px-2 py-0.5 rounded-full">
                             <XCircle className="w-3 h-3" /> Sem WhatsApp
                           </span>
                         )}
@@ -660,7 +668,7 @@ function Verificador() {
                     onChange={() => setPastaSelecionada(p.id)}
                     className="accent-primary"
                   />
-                  <Folder className="w-4 h-4 text-primary shrink-0" />
+                  <Folder className="w-4 h-4 text-brand shrink-0" />
                   <span className="text-sm font-medium">{p.nome}</span>
                 </label>
               ))}

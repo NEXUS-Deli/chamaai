@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Send, Users, MessageSquare, Clock } from "lucide-react";
+import { MetricGrid, Metric } from "@/components/metric-grid";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -31,6 +32,8 @@ function CampanhasList() {
       const { data } = await supabase
         .from("campanhas")
         .select("id,nome,status,total_contatos,enviadas,criada_em")
+        // Somente campanhas de WhatsApp (as de e-mail ficam em E-mail Marketing)
+        .or("tipo_campanha.is.null,tipo_campanha.neq.EMAIL")
         .order("criada_em", { ascending: false });
       return data ?? [];
     },
@@ -58,11 +61,19 @@ function CampanhasList() {
     },
   });
 
+  const lista = data ?? [];
+  const totais = {
+    campanhas: lista.length,
+    contatos: lista.reduce((acc, c) => acc + (c.total_contatos ?? 0), 0),
+    enviadas: lista.reduce((acc, c) => acc + (c.enviadas ?? 0), 0),
+    ativas: lista.filter((c) => ["aguardando", "agendada", "em_andamento"].includes(c.status)).length,
+  };
+
   return (
     <div className="p-4 sm:p-8 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Campanhas</h1>
+          <h1 className="text-2xl font-bold">WhatsApp Marketing</h1>
           <p className="text-sm text-muted-foreground">Histórico de disparos</p>
         </div>
         <Link to="/campanhas/nova">
@@ -72,6 +83,20 @@ function CampanhasList() {
           </Button>
         </Link>
       </div>
+
+      <MetricGrid>
+        <Metric label="Campanhas"          value={totais.campanhas}                         icon={Send}          note="criadas" />
+        <Metric label="Contatos"           value={totais.contatos.toLocaleString("pt-BR")}  icon={Users}         note="nas campanhas" />
+        <Metric label="Mensagens enviadas" value={totais.enviadas.toLocaleString("pt-BR")}  icon={MessageSquare} note="no total" />
+        <Metric
+          label="Em andamento"
+          value={totais.ativas}
+          icon={Clock}
+          note="agendadas ou disparando"
+          tone={totais.ativas > 0 ? "brand" : undefined}
+        />
+      </MetricGrid>
+
       <Card className="p-0 overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-sm min-w-[480px]">
@@ -102,7 +127,7 @@ function CampanhasList() {
                     <Link
                       to="/campanhas/$id"
                       params={{ id: c.id }}
-                      className="text-primary hover:underline text-sm font-medium"
+                      className="text-brand hover:underline text-sm font-medium"
                     >
                       Ver
                     </Link>
@@ -146,7 +171,7 @@ function CampanhasList() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground ring-0 before:hidden [&_svg]:text-destructive-foreground"
               onClick={() => {
                 if (campanhaToDelete) {
                   deleteMutation.mutate(campanhaToDelete);

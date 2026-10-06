@@ -14,25 +14,25 @@ const tools = [
     title: "Verificador de WhatsApp",
     description: "Valide números de telefone para saber se possuem WhatsApp ativo.",
     tag: "Ativo",
-    tagColor: "bg-green-100 text-green-700",
+    tagColor: "bg-success-subtle text-success",
   },
   {
     id: "importador",
     to: "/ferramentas/importador",
     icon: ArrowDownToLine,
     title: "Importador de Contatos",
-    description: "Importe os contatos do WhatsApp diretamente para uma pasta dentro da Chama AI.",
+    description: "Importe os contatos do WhatsApp diretamente para uma pasta dentro do Prospecta 360.",
     tag: "Ativo",
-    tagColor: "bg-green-100 text-green-700",
+    tagColor: "bg-success-subtle text-success",
   },
   {
     id: "extrator",
     to: "/ferramentas/extrator",
     icon: Users,
     title: "Extrator de Grupos",
-    description: "Faça a extração de leads dos grupos do WhatsApp com a Chama AI.",
+    description: "Faça a extração de leads dos grupos do WhatsApp com o Prospecta 360.",
     tag: "Ativo",
-    tagColor: "bg-green-100 text-green-700",
+    tagColor: "bg-success-subtle text-success",
   },
 ];
 
@@ -41,7 +41,7 @@ function FerramentasPage() {
     <div className="p-8 space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Ferramentas</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-muted-foreground">
           Utilitários para gerenciar e otimizar suas conexões WhatsApp.
         </p>
       </div>
@@ -52,7 +52,7 @@ function FerramentasPage() {
             <Card className="p-6 h-full flex flex-col gap-4 hover:border-primary/50 hover:shadow-sm transition-all group cursor-pointer">
               <div className="flex items-start justify-between">
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <tool.icon className="w-5 h-5 text-primary" />
+                  <tool.icon className="w-5 h-5 text-brand" />
                 </div>
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${tool.tagColor}`}>
                   {tool.tag}
@@ -62,7 +62,7 @@ function FerramentasPage() {
                 <h3 className="font-semibold text-sm">{tool.title}</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">{tool.description}</p>
               </div>
-              <div className="flex items-center gap-1 text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-1 text-xs font-medium text-brand opacity-0 group-hover:opacity-100 transition-opacity">
                 Acessar <ArrowRight className="w-3 h-3" />
               </div>
             </Card>

@@ -12,6 +12,7 @@ import { isValidPhone, formatPhoneBR, normalizePhone } from "@/lib/phone";
 import { parseCSV, downloadCSV, templateLeadsCSV } from "@/lib/csv";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { classeChip } from "@/lib/selecao";
 
 export const Route = createFileRoute("/_authenticated/leads")({
   component: LeadsPage,
@@ -229,7 +230,7 @@ function LeadsPage() {
           <button
             onClick={() => setPastaSel(null)}
             className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-md text-sm ${
-              pastaSel === null ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"
+              pastaSel === null ? "bg-primary/10 text-brand font-medium" : "hover:bg-muted"
             }`}
           >
             <span className="flex items-center gap-2"><Folder className="w-4 h-4" /> Todos os leads</span>
@@ -240,14 +241,14 @@ function LeadsPage() {
               <button
                 onClick={() => setPastaSel(p.id)}
                 className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-md text-sm ${
-                  pastaSel === p.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"
+                  pastaSel === p.id ? "bg-primary/10 text-brand font-medium" : "hover:bg-muted"
                 }`}
               >
                 <span className="flex items-center gap-2 truncate min-w-0">
                   <Folder className="w-4 h-4 shrink-0" />
                   <span className="truncate">{p.nome}</span>
                   {p.codigo && (
-                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono">
+                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-brand font-mono">
                       {p.codigo}
                     </span>
                   )}
@@ -284,9 +285,7 @@ function LeadsPage() {
             <div className="flex gap-1.5 w-max">
               <button
                 onClick={() => setPastaSel(null)}
-                className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  pastaSel === null ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                }`}
+                className={`shrink-0 ${classeChip(pastaSel === null)}`}
               >
                 Todos ({leads.length})
               </button>
@@ -294,9 +293,7 @@ function LeadsPage() {
                 <button
                   key={p.id}
                   onClick={() => setPastaSel(p.id)}
-                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                    pastaSel === p.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                  }`}
+                  className={`shrink-0 ${classeChip(pastaSel === p.id)}`}
                 >
                   {p.nome} ({countPorPasta(p.id)})
                 </button>
@@ -353,8 +350,8 @@ function LeadsPage() {
         {/* Barra de ações em massa */}
         {selecionados.size > 0 && (
           <div className="px-3 sm:px-4 py-2.5 bg-primary/5 border-b border-primary/20 flex items-center gap-2 sm:gap-3">
-            <CheckSquare className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-sm font-medium text-primary flex-1">
+            <CheckSquare className="w-4 h-4 text-brand shrink-0" />
+            <span className="text-sm font-medium text-brand flex-1">
               {selecionados.size} contato{selecionados.size !== 1 ? "s" : ""} selecionado{selecionados.size !== 1 ? "s" : ""}
             </span>
             <Button
@@ -448,7 +445,7 @@ function LeadsPage() {
                     <td className="py-3 hidden lg:table-cell" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-wrap gap-1">
                         {(l.tags ?? []).slice(0, 3).map((tag) => (
-                          <span key={tag} className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-medium">
+                          <span key={tag} className="px-1.5 py-0.5 rounded bg-primary/10 text-brand text-[10px] font-medium">
                             {tag}
                           </span>
                         ))}
@@ -467,10 +464,10 @@ function LeadsPage() {
                     <td className="py-2 pr-1 sm:pr-2" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setTagsLead(l)} title="Gerenciar tags">
-                          <Tag className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
+                          <Tag className="w-3.5 h-3.5 text-muted-foreground hover:text-brand" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 hidden sm:inline-flex" onClick={() => setHistoricoLead(l)} title="Histórico de disparos">
-                          <History className="w-3.5 h-3.5 text-muted-foreground hover:text-blue-600" />
+                          <History className="w-3.5 h-3.5 text-muted-foreground hover:text-info" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => excluirLead(l.id)} title="Excluir contato">
                           <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
@@ -538,7 +535,7 @@ function MoverPastaModal({
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FolderInput className="w-4 h-4 text-primary" /> Mover {quantidade} contato{quantidade !== 1 ? "s" : ""}
+            <FolderInput className="w-4 h-4 text-brand" /> Mover {quantidade} contato{quantidade !== 1 ? "s" : ""}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -554,9 +551,9 @@ function MoverPastaModal({
               <label key={p.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${destino === p.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"}`}>
                 <input type="radio" name="pasta-destino" value={p.id} checked={destino === p.id} onChange={() => setDestino(p.id)} className="accent-primary" />
                 <span className="flex items-center gap-2 text-sm font-medium flex-1 min-w-0">
-                  <Folder className="w-4 h-4 text-primary shrink-0" />
+                  <Folder className="w-4 h-4 text-brand shrink-0" />
                   <span className="truncate">{p.nome}</span>
-                  {p.codigo && <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono">{p.codigo}</span>}
+                  {p.codigo && <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-brand font-mono">{p.codigo}</span>}
                 </span>
               </label>
             ))}
@@ -937,7 +934,7 @@ function TagsModal({ lead, onClose, onSalvo }: { lead: Lead; onClose: () => void
           {tags.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {tags.map((t) => (
-                <span key={t} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                <span key={t} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-brand text-xs font-medium">
                   {t}
                   <button onClick={() => removeTag(t)} className="hover:text-destructive transition-colors">
                     <X className="w-3 h-3" />
@@ -961,12 +958,12 @@ function TagsModal({ lead, onClose, onSalvo }: { lead: Lead; onClose: () => void
 }
 
 const DISPARO_STATUS_COLOR: Record<string, string> = {
-  pendente: "bg-yellow-100 text-yellow-800",
-  enviado: "bg-blue-100 text-blue-800",
-  entregue: "bg-green-100 text-green-800",
+  pendente: "bg-warning-subtle text-warning",
+  enviado: "bg-info-subtle text-info",
+  entregue: "bg-success-subtle text-success",
   lido: "bg-purple-100 text-purple-800",
-  invalido: "bg-red-100 text-red-800",
-  erro: "bg-red-100 text-red-800",
+  invalido: "bg-danger-subtle text-danger",
+  erro: "bg-danger-subtle text-danger",
   cancelado: "bg-muted text-muted-foreground",
 };
 

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Trash2, Plus, Mail, Loader2, Save, CheckCircle2, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { canAddConnection } from "@/lib/plans";
 
 interface EmailCredential {
   id: string;
@@ -17,7 +18,22 @@ interface EmailCredential {
   encryption: string | null;
 }
 
-export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function EmailCredentialsModal({
+  isOpen,
+  onClose,
+  editId = null,
+  startAdding = false,
+  onChanged,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  /** Quando informado, o modal abre direto na edição desta credencial. */
+  editId?: string | null;
+  /** Quando true, o modal abre direto no formulário de nova credencial. */
+  startAdding?: boolean;
+  /** Chamado após salvar, atualizar ou excluir uma credencial. */
+  onChanged?: () => void;
+}) {
   const [credentials, setCredentials] = useState<EmailCredential[]>([]);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -34,16 +50,32 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
     encryption: "ssl",
   });
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchCredentials();
-    }
-  }, [isOpen]);
+  const emptyForm = {
+    host: "",
+    port: "465",
+    username: "",
+    password: "",
+    from_name: "",
+    from_email: "",
+    encryption: "ssl",
+  };
 
-  const fetchCredentials = async () => {
+  useEffect(() => {
+    if (!isOpen) return;
+    setAdding(startAdding);
+    setEditingId(null);
+    setFormData(emptyForm);
+    fetchCredentials().then((list) => {
+      const target = editId ? list.find((c) => c.id === editId) : undefined;
+      if (target) handleEdit(target);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editId, startAdding]);
+
+  const fetchCredentials = async (): Promise<EmailCredential[]> => {
     setLoading(true);
     const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
+    if (!u.user) { setLoading(false); return []; }
 
     const { data, error } = await supabase
       .from("email_credentials")
@@ -56,6 +88,7 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
       setCredentials(data || []);
     }
     setLoading(false);
+    return data || [];
   };
 
   const handleDelete = async (id: string) => {
@@ -67,6 +100,7 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
     } else {
       toast.success("Credencial excluída!");
       setCredentials(credentials.filter(c => c.id !== id));
+      onChanged?.();
     }
     setLoading(false);
   };
@@ -99,6 +133,7 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
       } else if (data) {
         toast.success("Credencial atualizada com sucesso!");
         setCredentials(credentials.map(c => c.id === editingId ? data : c));
+        onChanged?.();
         setAdding(false);
         setEditingId(null);
         setFormData({
@@ -121,7 +156,20 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
 
     setLoading(true);
     const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
+    if (!u.user) { setLoading(false); return; }
+
+    try {
+      const limitCheck = await canAddConnection(u.user.id);
+      if (!limitCheck.allowed) {
+        setLoading(false);
+        return toast.error(
+          `Limite do plano ${limitCheck.planName} atingido (${limitCheck.current}/${limitCheck.limit} conexões). Faça upgrade para adicionar mais conexões.`
+        );
+      }
+    } catch (err) {
+      setLoading(false);
+      return toast.error(err instanceof Error ? err.message : String(err));
+    }
 
     const { data, error } = await supabase
       .from("email_credentials")
@@ -143,6 +191,7 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
     } else if (data) {
       toast.success("Credencial de e-mail salva com sucesso!");
       setCredentials([...credentials, data]);
+      onChanged?.();
       setAdding(false);
       setEditingId(null);
       setFormData({
@@ -222,7 +271,7 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Mail className="w-5 h-5 text-primary" />
+            <Mail className="w-5 h-5 text-brand" />
             Credenciais de E-mail (SMTP)
           </DialogTitle>
           <DialogDescription>
@@ -307,7 +356,7 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
                   onClick={() => handleTestarConexao(formData)} 
                   disabled={testing || loading}
                 >
-                  {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />}
+                  {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2 text-success" />}
                   {testing ? "Testando..." : "Testar Conexão"}
                 </Button>
                 <div className="flex gap-2">
@@ -323,7 +372,7 @@ export function EmailCredentialsModal({ isOpen, onClose }: { isOpen: boolean; on
 
           {loading && !adding && (
             <div className="flex justify-center p-8">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <Loader2 className="w-8 h-8 animate-spin text-brand" />
             </div>
           )}
 

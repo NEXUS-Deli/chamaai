@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2, Mail, Lock, ArrowRight, User } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -153,14 +154,14 @@ function AuthPage() {
         <div className="w-full max-w-sm">
 
           <div className="flex justify-center mb-8">
-            <img src="/logo.png" alt="Chama AI Delivery" className="h-20 w-auto object-contain" />
+            <BrandLogo className="h-14 w-auto max-w-[280px]" />
           </div>
 
           {mode === "login" ? (
             <>
               <div className="mb-7 text-center">
                 <h1 className="text-2xl font-bold">Dispare, venda e cresça.</h1>
-                <p className="text-sm text-muted-foreground mt-1">Faça login abaixo com as suas credenciais</p>
+                <p className="text-sm text-muted-foreground">Faça login abaixo com as suas credenciais</p>
               </div>
 
               <form onSubmit={handleLogin} className="space-y-5">
@@ -208,7 +209,7 @@ function AuthPage() {
 
               <p className="text-center text-sm text-muted-foreground mt-8">
                 Não tem uma conta?{" "}
-                <button onClick={() => switchMode("signup")} className="text-primary font-semibold hover:underline">
+                <button onClick={() => switchMode("signup")} className="text-brand font-semibold hover:underline">
                   Criar conta
                 </button>
               </p>
@@ -217,7 +218,7 @@ function AuthPage() {
             <>
               <div className="mb-7 text-center">
                 <h1 className="text-2xl font-bold">Criar conta</h1>
-                <p className="text-sm text-muted-foreground mt-1">Preencha os dados abaixo para começar</p>
+                <p className="text-sm text-muted-foreground">Preencha os dados abaixo para começar</p>
               </div>
 
               <form onSubmit={handleSignup} className="space-y-5">
@@ -282,7 +283,7 @@ function AuthPage() {
 
               <p className="text-center text-sm text-muted-foreground mt-8">
                 Já tenho uma conta.{" "}
-                <button onClick={() => switchMode("login")} className="text-primary font-semibold hover:underline">
+                <button onClick={() => switchMode("login")} className="text-brand font-semibold hover:underline">
                   Entrar
                 </button>
               </p>

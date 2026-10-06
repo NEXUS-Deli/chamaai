@@ -1,8 +1,9 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Users, LogOut, Flame, Menu, X, ChevronLeft, ChevronRight, Sun, Moon, Wrench, Clapperboard, FileText, Send, ShieldCheck, Bot, Mail } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, Menu, X, ChevronLeft, ChevronRight, Sun, Moon, Wrench, Clapperboard, FileText, Send, ShieldCheck, Bot, Mail } from "lucide-react";
 import { type ReactNode, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBranding } from "@/lib/branding";
+import { BrandLogo, BrandIcon } from "@/components/brand-logo";
 import { useTheme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
@@ -17,12 +18,13 @@ function WhatsAppIcon({ className }: { className?: string }) {
 
 const items = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/campanhas", label: "Disparo de Mensagem", icon: Send },
-  { to: "/stories", label: "Stories do WhatsApp", icon: Clapperboard },
-  { to: "/leads", label: "Clientes/Leads", icon: Users },
-  { to: "/templates", label: "Templates", icon: FileText },
+  { to: "/campanhas", label: "WhatsApp Marketing", icon: Send },
   { to: "/email-marketing", label: "E-mail Marketing", icon: Mail },
+  { to: "/stories", label: "Stories Marketing", icon: Clapperboard },
+  { to: "/atendimento-ia", label: "Atendimento com IA", icon: Bot },
+  { to: "/leads", label: "Carteira de Leads", icon: Users },
   { to: "/configuracoes", label: "Conexões", icon: WhatsAppIcon },
+  { to: "/templates", label: "Templates", icon: FileText },
   { to: "/ferramentas/verificador", label: "Ferramentas", icon: Wrench },
 ];
 
@@ -71,6 +73,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     navigate({ to: "/auth", replace: true });
   };
 
+  // Item ativo: cartão claro com borda sutil, texto em destaque, ícone verde e barra de 3px à esquerda.
+  const navItemClass = (active: boolean, collapsed: boolean) =>
+    `relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-200 ${
+      collapsed ? "justify-center px-2" : ""
+    } ${
+      active
+        ? "bg-card text-foreground font-semibold shadow-sm ring-1 ring-sidebar-border before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-r-full before:bg-primary [&>svg]:text-brand"
+        : "text-muted-foreground font-medium hover:bg-sidebar-accent hover:text-foreground"
+    }`;
+
   const NavLinks = ({ collapsed = false }: { collapsed?: boolean }) => (
     <nav className="flex-1 p-3 space-y-1">
       {items.map((item) => {
@@ -87,13 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             key={item.to}
             to={item.to}
             title={collapsed ? item.label : undefined}
-            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-              collapsed ? "justify-center px-2" : ""
-            } ${
-              active
-                ? "bg-primary text-primary-foreground"
-                : "text-sidebar-foreground hover:bg-sidebar-accent"
-            }`}
+            className={navItemClass(active, collapsed)}
           >
             <item.icon className="w-4 h-4 shrink-0" />
             {!collapsed && <span className="truncate">{item.label}</span>}
@@ -101,34 +107,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         );
       })}
 
-      {isAdmin && (
-        <Link
-          to="/atendimento-ia"
-          title={collapsed ? "Atendimento com IA" : undefined}
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 mt-2 border-t border-sidebar-border pt-3 ${
-            collapsed ? "justify-center px-2" : ""
-          } ${
-            pathname === "/atendimento-ia" || pathname.startsWith("/atendimento-ia/")
-              ? "bg-primary text-primary-foreground"
-              : "text-sidebar-foreground hover:bg-sidebar-accent"
-          }`}
-        >
-          <Bot className="w-4 h-4 shrink-0" />
-          {!collapsed && <span className="truncate">Atendimento com IA</span>}
-        </Link>
-      )}
+      {isAdmin && <div className="!my-3 mx-1 border-t border-sidebar-border" />}
 
       {isAdmin && (
         <Link
           to="/admin"
           title={collapsed ? "Admin" : undefined}
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-            collapsed ? "justify-center px-2" : ""
-          } ${
-            pathname === "/admin"
-              ? "bg-primary text-primary-foreground"
-              : "text-sidebar-foreground hover:bg-sidebar-accent"
-          }`}
+          className={navItemClass(pathname === "/admin", collapsed)}
         >
           <ShieldCheck className="w-4 h-4 shrink-0" />
           {!collapsed && <span className="truncate">Admin</span>}
@@ -159,7 +144,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         {/* Header do drawer mobile */}
         <div className="h-20 flex items-center justify-between gap-2 px-4 border-b border-sidebar-border">
-          <img src={branding.logo_url || "/logo.png"} alt={branding.nome_produto} className="h-14 w-auto object-contain max-w-[180px]" />
+          {branding.logo_url
+            ? <img src={branding.logo_url} alt={branding.nome_produto} className="h-14 w-auto object-contain max-w-[180px]" />
+            : <BrandLogo className="h-11 w-auto max-w-[190px]" />}
           <Button
             variant="ghost"
             size="icon"
@@ -190,18 +177,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         className={`
           hidden md:flex flex-col shrink-0 bg-sidebar border-r border-sidebar-border
           transition-all duration-300 ease-in-out
-          ${desktopCollapsed ? "w-16" : "w-60"}
+          ${desktopCollapsed ? "w-16" : "w-64"}
         `}
       >
         {/* Header desktop */}
         <div className={`h-20 flex items-center border-b border-sidebar-border shrink-0 ${desktopCollapsed ? "justify-center px-2" : "justify-between px-4"}`}>
-          {!desktopCollapsed && (
-            <img src={branding.logo_url || "/logo.png"} alt={branding.nome_produto} className="h-14 w-auto object-contain max-w-[180px]" />
-          )}
+          {!desktopCollapsed && (branding.logo_url
+            ? <img src={branding.logo_url} alt={branding.nome_produto} className="h-14 w-auto object-contain max-w-[180px]" />
+            : <BrandLogo className="h-11 w-auto max-w-[190px]" />)}
           {desktopCollapsed && (
-            <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
-              <Flame className="w-4 h-4" />
-            </div>
+            <BrandIcon className="w-7 h-7" />
           )}
           <Button
             variant="ghost"
@@ -269,7 +254,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Menu className="w-5 h-5" />
           </Button>
-          <img src={branding.logo_url || "/logo.png"} alt={branding.nome_produto} className="h-10 w-auto object-contain max-w-[140px]" />
+          {branding.logo_url
+            ? <img src={branding.logo_url} alt={branding.nome_produto} className="h-10 w-auto object-contain max-w-[140px]" />
+            : <BrandLogo className="h-7 w-auto max-w-[140px]" />}
         </header>
 
         <main className="flex-1 overflow-auto">{children}</main>

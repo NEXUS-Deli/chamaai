@@ -7,6 +7,7 @@ import { Users, Send, Zap, BarChart3, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { MetricGrid, Metric } from "@/components/metric-grid";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
@@ -21,13 +22,18 @@ interface Campanha {
 interface Instancia { id: string; nome: string; usuario_id: string }
 interface Plan { id: string; name: string; max_connections: number }
 interface UserPlan { user_id: string; plan_id: string }
+interface UsoIA { usuario_id: string; respostas: number; bloqueadas: number; tokens_entrada: number; tokens_saida: number }
+
+// Mesmos valores padrão de supabase/functions/_shared/ai-agent-core.ts (AI_LIMITE_USUARIO_DIA / AI_LIMITE_GLOBAL_DIA)
+const IA_LIMITE_USUARIO_DIA = 300;
+const IA_LIMITE_GLOBAL_DIA = 3000;
 
 const STATUS_LABEL: Record<string, { label: string; class: string }> = {
-  em_andamento: { label: "Ativo",     class: "bg-green-100 text-green-700" },
-  pausada:      { label: "Pausada",   class: "bg-yellow-100 text-yellow-700" },
-  concluida:    { label: "Concluída", class: "bg-blue-100 text-blue-700" },
+  em_andamento: { label: "Ativo",     class: "bg-success-subtle text-success" },
+  pausada:      { label: "Pausada",   class: "bg-warning-subtle text-warning" },
+  concluida:    { label: "Concluída", class: "bg-info-subtle text-info" },
   agendada:     { label: "Agendada",  class: "bg-purple-100 text-purple-700" },
-  cancelada:    { label: "Cancelada", class: "bg-red-100 text-red-700" },
+  cancelada:    { label: "Cancelada", class: "bg-danger-subtle text-danger" },
   rascunho:     { label: "Rascunho",  class: "bg-muted text-muted-foreground" },
 };
 
@@ -43,6 +49,7 @@ function AdminPage() {
   const [filtroStatus, setFiltroStatus] = useState<string>("all");
   const [plans, setPlans]             = useState<Plan[]>([]);
   const [userPlans, setUserPlans]     = useState<Record<string, string>>({}); // user_id -> plan_id
+  const [usoIA, setUsoIA] = useState<UsoIA[]>([]);
   const [changingPlanId, setChangingPlanId] = useState<string | null>(null);
 
   const load = async () => {
@@ -71,6 +78,7 @@ function AdminPage() {
       { count: leads },
       { data: plansData },
       { data: userPlansData },
+      { data: usoIAData },
     ] = await Promise.all([
       (supabase as any).from("profiles").select("id,nome,email"),
       (supabase as any)
@@ -82,7 +90,13 @@ function AdminPage() {
       (supabase as any).from("leads").select("id", { count: "exact", head: true }),
       (supabase as any).from("plans").select("id,name,max_connections").order("max_connections", { ascending: true }),
       (supabase as any).from("user_plans").select("user_id,plan_id"),
+      (supabase as any)
+        .from("ai_uso_diario")
+        .select("usuario_id,respostas,bloqueadas,tokens_entrada,tokens_saida")
+        .eq("dia", new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().split("T")[0])
+        .order("respostas", { ascending: false }),
     ]);
+    setUsoIA((usoIAData ?? []) as UsoIA[]);
 
     setProfiles(profs ?? []);
     setCampanhas(camps ?? []);
@@ -167,30 +181,18 @@ function AdminPage() {
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { icon: Users,    label: "Usuários com campanhas", value: usuariosAtivos },
-          { icon: Zap,      label: "Campanhas ativas agora",  value: ativas.length },
-          { icon: Send,     label: "Total de disparos",       value: totalEnviadas.toLocaleString("pt-BR") },
-          { icon: BarChart3,label: "Total de leads",          value: totalLeads.toLocaleString("pt-BR") },
-        ].map((s) => (
-          <Card key={s.label} className="p-4 flex gap-3 items-center">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <s.icon className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">{s.label}</p>
-              <p className="text-xl font-bold">{s.value}</p>
-            </div>
-          </Card>
-        ))}
-      </div>
+      {/* Métricas — mesmo visual de painéis unidos das demais páginas */}
+      <MetricGrid>
+        <Metric label="Usuários com campanhas" value={usuariosAtivos}                          icon={Users}     note="com ao menos 1 campanha" />
+        <Metric label="Campanhas ativas agora" value={ativas.length}                           icon={Zap}       note="disparando neste momento" tone={ativas.length > 0 ? "brand" : undefined} />
+        <Metric label="Total de disparos"      value={totalEnviadas.toLocaleString("pt-BR")}  icon={Send}      note="mensagens enviadas" />
+        <Metric label="Total de leads"         value={totalLeads.toLocaleString("pt-BR")}     icon={BarChart3} note="na plataforma" />
+      </MetricGrid>
 
       {/* Campanhas ativas */}
       {ativas.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Disparando agora</h2>
+          <h2 className="font-semibold mb-3">Disparando agora</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {ativas.map((c) => {
               const prof = profileMap[c.usuario_id];
@@ -202,8 +204,8 @@ function AdminPage() {
                       <p className="font-semibold truncate text-sm">{c.nome}</p>
                       <p className="text-xs text-muted-foreground truncate">{prof?.email ?? prof?.nome ?? c.usuario_id.slice(0, 8)}</p>
                     </div>
-                    <span className="shrink-0 flex items-center gap-1 text-xs font-medium text-green-700">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    <span className="shrink-0 flex items-center gap-1 text-xs font-medium text-success">
+                      <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                       Ativo
                     </span>
                   </div>
@@ -216,7 +218,7 @@ function AdminPage() {
                       <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
-                  <Link to="/campanhas/$id" params={{ id: c.id }} className="text-xs text-primary hover:underline">
+                  <Link to="/campanhas/$id" params={{ id: c.id }} className="text-xs text-brand hover:underline">
                     Ver detalhes →
                   </Link>
                 </Card>
@@ -226,13 +228,64 @@ function AdminPage() {
         </div>
       )}
 
+      {/* Atendimento com IA — consumo de hoje */}
+      <div>
+        <h2 className="font-semibold mb-3">
+          Atendimento com IA — consumo de hoje
+        </h2>
+        <Card className="overflow-hidden">
+          <div className="px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span>
+              <span className="font-semibold">{usoIA.reduce((a, u) => a + u.respostas, 0).toLocaleString("pt-BR")}</span>
+              <span className="text-muted-foreground"> / {IA_LIMITE_GLOBAL_DIA.toLocaleString("pt-BR")} respostas no sistema</span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Limite por usuário: {IA_LIMITE_USUARIO_DIA}/dia · tokens hoje:{" "}
+              {usoIA.reduce((a, u) => a + Number(u.tokens_entrada) + Number(u.tokens_saida), 0).toLocaleString("pt-BR")}
+            </span>
+          </div>
+          {usoIA.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-muted-foreground text-center">Nenhuma resposta da IA hoje.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
+                <thead className="border-b text-left text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Usuário</th>
+                    <th className="px-3 py-3 text-right">Respostas</th>
+                    <th className="px-3 py-3 text-right">Bloqueadas</th>
+                    <th className="px-3 py-3 text-right">Tokens (entrada / saída)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usoIA.map((u) => (
+                    <tr key={u.usuario_id} className="border-b last:border-0">
+                      <td className="px-4 py-2.5 truncate max-w-[240px]">
+                        {profileMap[u.usuario_id]?.email ?? profileMap[u.usuario_id]?.nome ?? u.usuario_id.slice(0, 8)}
+                      </td>
+                      <td className={`px-3 py-2.5 text-right font-medium ${u.respostas >= IA_LIMITE_USUARIO_DIA ? "text-danger" : ""}`}>
+                        {u.respostas}/{IA_LIMITE_USUARIO_DIA}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-muted-foreground">{u.bloqueadas}</td>
+                      <td className="px-3 py-2.5 text-right text-muted-foreground">
+                        {Number(u.tokens_entrada).toLocaleString("pt-BR")} / {Number(u.tokens_saida).toLocaleString("pt-BR")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
+
       {/* Usuários */}
       <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Usuários</h2>
+        <h2 className="font-semibold mb-3">Usuários</h2>
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[650px]">
-              <thead className="border-b text-left text-muted-foreground text-xs uppercase tracking-wide">
+              <thead className="border-b text-left text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Usuário</th>
                   <th className="px-3 py-3">Plano</th>
@@ -298,7 +351,7 @@ function AdminPage() {
       {/* Todas as campanhas */}
       <div>
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          <h2 className="font-semibold">
             Campanhas {filtroUser !== "all" && `— ${profileMap[filtroUser]?.email ?? filtroUser.slice(0, 8)}`}
           </h2>
           <div className="flex gap-2 flex-wrap">
@@ -321,7 +374,7 @@ function AdminPage() {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[600px]">
-              <thead className="border-b text-left text-muted-foreground text-xs uppercase tracking-wide">
+              <thead className="border-b text-left text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Campanha</th>
                   <th className="px-3 py-3">Usuário</th>
@@ -369,7 +422,7 @@ function AdminPage() {
                         <Link
                           to="/campanhas/$id"
                           params={{ id: c.id }}
-                          className="text-primary hover:underline text-xs font-medium"
+                          className="text-brand hover:underline text-xs font-medium"
                         >
                           Ver
                         </Link>

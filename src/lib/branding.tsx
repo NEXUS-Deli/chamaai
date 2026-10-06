@@ -1,4 +1,4 @@
-// Provider de white-label: aplica cor primária, nome e logo em runtime.
+// Provider de white-label: aplica nome e logo em runtime.
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -9,31 +9,22 @@ interface Branding {
 }
 
 const defaults: Branding = {
-  nome_produto: "Chama AI Delivery",
+  nome_produto: "Prospecta 360",
   cor_primaria: "#FF5C00",
-  logo_url: "/logo.png",
+  logo_url: "", // vazio = usa a logo padrão Prospecta 360 (BrandLogo)
 };
+
+// "/logo.png" era o padrão antigo (logo anterior) e pode estar salvo no cache do navegador
+// "Chama AI Delivery" era o nome padrão antigo (default da coluna no banco)
+const normalizarNome = (nome: string | null | undefined) =>
+  nome && nome !== "Chama AI Delivery" ? nome : "Prospecta 360";
+
+const normalizarLogo = (url: string | null | undefined) => (url && url !== "/logo.png" ? url : "");
 
 const Ctx = createContext<{ branding: Branding; refresh: () => void }>({
   branding: defaults,
   refresh: () => {},
 });
-
-function hexToOklch(hex: string): string {
-  // Converte hex aprox para oklch via canvas color parsing (fallback simples)
-  try {
-    const m = hex.replace("#", "");
-    if (m.length !== 6) return "oklch(0.68 0.22 40)";
-    const r = parseInt(m.slice(0, 2), 16) / 255;
-    const g = parseInt(m.slice(2, 4), 16) / 255;
-    const b = parseInt(m.slice(4, 6), 16) / 255;
-    // Aproximação: usa valor original via color-mix com black/white não dá controle ok.
-    // Definimos --primary direto em rgb que oklch entende como cor; usamos `color` rgb.
-    return `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`;
-  } catch {
-    return "oklch(0.68 0.22 40)";
-  }
-}
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
   const [branding, setBranding] = useState<Branding>(() => {
@@ -45,7 +36,8 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       return {
         ...defaults,
         ...parsed,
-        logo_url: parsed.logo_url || defaults.logo_url,
+        nome_produto: normalizarNome(parsed.nome_produto),
+        logo_url: normalizarLogo(parsed.logo_url),
       };
     } catch {
       return defaults;
@@ -54,9 +46,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
   const apply = (b: Branding) => {
     if (typeof document === "undefined") return;
-    document.documentElement.style.setProperty("--primary", hexToOklch(b.cor_primaria));
-    document.documentElement.style.setProperty("--ring", hexToOklch(b.cor_primaria));
-    document.documentElement.style.setProperty("--sidebar-primary", hexToOklch(b.cor_primaria));
+    // Cores vêm exclusivamente do tema (src/styles.css); cor_primaria não é mais aplicada.
     if (b.nome_produto) document.title = b.nome_produto;
   };
 
@@ -70,9 +60,9 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
     if (data) {
       const next = {
-        nome_produto: data.nome_produto || defaults.nome_produto,
+        nome_produto: normalizarNome(data.nome_produto),
         cor_primaria: data.cor_primaria || defaults.cor_primaria,
-        logo_url: data.logo_url || defaults.logo_url,
+        logo_url: normalizarLogo(data.logo_url),
       };
       setBranding(next);
       try {
