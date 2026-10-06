@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { FerramentasHeader } from "@/components/ferramentas-nav";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Ban, Plus, Trash2, Search, Upload, Download, Loader2, X, CheckSquare } from "lucide-react";
+import { Plus, Trash2, Search, Upload, Download, Loader2, X, CheckSquare } from "lucide-react";
 import { formatPhoneBR } from "@/lib/phone";
 
 export const Route = createFileRoute("/_authenticated/ferramentas/blacklist")({
@@ -111,30 +112,25 @@ function BlacklistPage() {
 
   return (
     <div className="p-8 space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Ban className="w-6 h-6 text-destructive" /> Lista de Bloqueio
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Números bloqueados nunca receberão mensagens das suas campanhas.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <label className="cursor-pointer">
-            <Button variant="outline" size="sm" className="gap-2" asChild>
-              <span><Upload className="w-4 h-4" /> Importar CSV</span>
+      <FerramentasHeader
+        active="blacklist"
+        actions={
+          <>
+            <label className="cursor-pointer">
+              <Button variant="outline" size="sm" className="gap-2" asChild>
+                <span><Upload className="w-4 h-4" /> Importar CSV</span>
+              </Button>
+              <input type="file" accept=".csv" className="hidden" onChange={importarCSV} />
+            </label>
+            <Button variant="outline" size="sm" onClick={exportar} className="gap-2">
+              <Download className="w-4 h-4" /> Exportar
             </Button>
-            <input type="file" accept=".csv" className="hidden" onChange={importarCSV} />
-          </label>
-          <Button variant="outline" size="sm" onClick={exportar} className="gap-2">
-            <Download className="w-4 h-4" /> Exportar
-          </Button>
-          <Button size="sm" onClick={() => setModal(true)} className="gap-2">
-            <Plus className="w-4 h-4" /> Adicionar número
-          </Button>
-        </div>
-      </div>
+            <Button size="sm" onClick={() => setModal(true)} className="gap-2">
+              <Plus className="w-4 h-4" /> Adicionar número
+            </Button>
+          </>
+        }
+      />
 
       {/* Stats */}
       <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -155,8 +151,8 @@ function BlacklistPage() {
       {/* Barra de seleção em massa */}
       {selecionados.size > 0 && (
         <div className="px-4 py-2.5 bg-primary/5 border border-primary/20 rounded-lg flex items-center gap-3">
-          <CheckSquare className="w-4 h-4 text-primary shrink-0" />
-          <span className="text-sm font-medium text-primary flex-1">
+          <CheckSquare className="w-4 h-4 text-brand shrink-0" />
+          <span className="text-sm font-medium text-brand flex-1">
             {selecionados.size} selecionado(s)
           </span>
           <Button size="sm" variant="destructive" onClick={excluirSelecionados} disabled={excluindo} className="gap-1.5">

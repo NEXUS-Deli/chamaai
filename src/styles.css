@@ -5,16 +5,21 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system definition.
+ * Design system — Prospecta 360.
  *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
+ * Fonte única de cores do sistema. Os tokens semânticos do guia
+ * (prospecta360-paleta.md) ficam em :root (claro) e .dark / [data-theme="dark"]
+ * (escuro), sempre com os hex exatos do guia.
  *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
+ * Os nomes do shadcn (--background, --card, --muted, --destructive…) são
+ * apenas aliases dos tokens do guia, para que os componentes de ui/ continuem
+ * funcionando sem alteração estrutural.
  *
- * Primary: vivid red (#e00020 family). Light mode = white canvas.
- * Dark mode = near-black canvas, same vivid red accent.
+ * Regras:
+ * - Texto sobre primary = on-primary (#141c1f), nunca branco.
+ * - accent (#33ff00) só para destaques pontuais; nunca texto no tema claro.
+ * - Texto verde = text-brand.
+ * - Foco = anel de 2px em focus-ring.
  */
 
 @theme inline {
@@ -25,6 +30,28 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* Tokens do guia */
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border-strong: var(--border-strong);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-pressed: var(--primary-pressed);
+  --color-on-primary: var(--on-primary);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-brand: var(--text-brand);
+  --color-focus-ring: var(--focus-ring);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+
+  /* Aliases shadcn */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -60,106 +87,84 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* ── LIGHT MODE ─────────────────────────────────────────── */
+/* ── TEMA CLARO ─────────────────────────────────────────── */
 :root {
   --radius: 0.625rem;
 
-  --background:          oklch(1 0 0);
-  --foreground:          oklch(0.15 0.008 265);
+  --bg:#ffffff; --surface:#f6f7f7; --surface-raised:#ffffff; --surface-sunken:#ebeded;
+  --border:#d8dadb; --border-strong:#878e92;
+  --text:#253238; --text-muted:#5c656a; --text-inverse:#ffffff;
+  --primary:#21a600; --primary-hover:#2ad200; --primary-pressed:#228311; --on-primary:#141c1f;
+  --primary-subtle:#efffeb; --text-brand:#228311; --accent:#33ff00; --focus-ring:#21a600;
+  --success:#1f7a0f; --success-subtle:#efffeb; --warning:#a35f00; --warning-subtle:#fff6e5;
+  --danger:#c62a1f; --danger-subtle:#fdecea; --info:#1a62bb; --info-subtle:#eaf2fc;
 
-  --card:                oklch(1 0 0);
-  --card-foreground:     oklch(0.15 0.008 265);
-
-  --popover:             oklch(1 0 0);
-  --popover-foreground:  oklch(0.15 0.008 265);
-
-  /* Vivid red — Tailwind red-500 #ef4444 */
-  --primary:             oklch(0.628 0.258 29);
-  --primary-foreground:  oklch(1 0 0);
-
-  --secondary:           oklch(0.97 0.004 30);
-  --secondary-foreground:oklch(0.2 0.01 30);
-
-  --muted:               oklch(0.96 0.003 30);
-  --muted-foreground:    oklch(0.48 0.015 30);
-
-  /* Very light red tint for hover/accent */
-  --accent:              oklch(0.96 0.012 29);
-  --accent-foreground:   oklch(0.628 0.258 29);
-
-  --destructive:         oklch(0.628 0.258 29);
-  --destructive-foreground: oklch(1 0 0);
-
-  --border:              oklch(0.91 0.005 29);
-  --input:               oklch(0.91 0.005 29);
-  --ring:                oklch(0.628 0.258 29);
-
-  --chart-1:             oklch(0.628 0.258 29);
-  --chart-2:             oklch(0.65 0.22 40);
-  --chart-3:             oklch(0.42 0.20 25);
-  --chart-4:             oklch(0.75 0.15 55);
-  --chart-5:             oklch(0.60 0.24 15);
-
-  --sidebar:             oklch(0.985 0.004 30);
-  --sidebar-foreground:  oklch(0.2 0.01 30);
-  --sidebar-primary:     oklch(0.628 0.258 29);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent:      oklch(0.96 0.015 29);
-  --sidebar-accent-foreground:  oklch(0.628 0.258 29);
-  --sidebar-border:      oklch(0.91 0.005 29);
-  --sidebar-ring:        oklch(0.628 0.258 29);
+  /* Derivados (não estão no guia) */
+  --on-danger: #ffffff;
+  --chart-neutral: #878e92;
 }
 
-/* ── DARK MODE ──────────────────────────────────────────── */
-.dark {
-  --background:          oklch(0.13 0.006 260);
-  --foreground:          oklch(0.95 0.004 30);
+/* ── TEMA ESCURO ────────────────────────────────────────── */
+.dark,
+[data-theme="dark"] {
+  --bg:#141c1f; --surface:#1c262a; --surface-raised:#253238; --surface-sunken:#0f1517;
+  --border:#3f4b50; --border-strong:#707a7f;
+  --text:#f6f7f7; --text-muted:#b5b9bb; --text-inverse:#141c1f;
+  --primary:#33ff00; --primary-hover:#7aff59; --primary-pressed:#2ad200; --on-primary:#141c1f;
+  --primary-subtle:#1b3a1f; --text-brand:#33ff00; --accent:#33ff00; --focus-ring:#33ff00;
+  --success:#4ade2a; --success-subtle:#163019; --warning:#f5a524; --warning-subtle:#3a2a0c;
+  --danger:#ff6b5e; --danger-subtle:#3d1a17; --info:#6aaeff; --info-subtle:#14273d;
 
-  --card:                oklch(0.18 0.007 260);
-  --card-foreground:     oklch(0.95 0.004 30);
+  --on-danger: #141c1f;
+  --chart-neutral: #707a7f;
+}
 
-  --popover:             oklch(0.18 0.007 260);
-  --popover-foreground:  oklch(0.95 0.004 30);
+/* ── ALIASES SHADCN → TOKENS DO GUIA (valem nos dois temas) ── */
+:root,
+.dark,
+[data-theme="dark"] {
+  --background:           var(--bg);
+  --foreground:           var(--text);
+  --card:                 var(--surface-raised);
+  --card-foreground:      var(--text);
+  --popover:              var(--surface-raised);
+  --popover-foreground:   var(--text);
+  --primary-foreground:   var(--on-primary);
+  --secondary:            var(--surface-sunken);
+  --secondary-foreground: var(--text);
+  --muted:                var(--surface-sunken);
+  --muted-foreground:     var(--text-muted);
+  --accent-foreground:    var(--on-primary);
+  --destructive:          var(--danger);
+  --destructive-foreground: var(--on-danger);
+  --input:                var(--border-strong);
+  --ring:                 var(--focus-ring);
 
-  /* Vivid red — slightly brighter for dark bg */
-  --primary:             oklch(0.70 0.25 29);
-  --primary-foreground:  oklch(1 0 0);
+  --chart-1: var(--primary);
+  --chart-2: var(--chart-neutral);
+  --chart-3: var(--info);
+  --chart-4: var(--warning);
+  --chart-5: var(--danger);
 
-  --secondary:           oklch(0.22 0.008 260);
-  --secondary-foreground:oklch(0.95 0.004 30);
-
-  --muted:               oklch(0.22 0.008 260);
-  --muted-foreground:    oklch(0.60 0.015 30);
-
-  --accent:              oklch(0.24 0.012 27);
-  --accent-foreground:   oklch(0.95 0.004 30);
-
-  --destructive:         oklch(0.70 0.25 29);
-  --destructive-foreground: oklch(1 0 0);
-
-  --border:              oklch(1 0 0 / 10%);
-  --input:               oklch(1 0 0 / 15%);
-  --ring:                oklch(0.70 0.25 29);
-
-  --chart-1:             oklch(0.70 0.25 29);
-  --chart-2:             oklch(0.72 0.22 40);
-  --chart-3:             oklch(0.52 0.22 25);
-  --chart-4:             oklch(0.80 0.15 55);
-  --chart-5:             oklch(0.68 0.24 15);
-
-  --sidebar:             oklch(0.16 0.007 260);
-  --sidebar-foreground:  oklch(0.92 0.004 30);
-  --sidebar-primary:     oklch(0.70 0.25 29);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent:      oklch(0.24 0.015 29);
-  --sidebar-accent-foreground:  oklch(0.92 0.004 30);
-  --sidebar-border:      oklch(1 0 0 / 10%);
-  --sidebar-ring:        oklch(0.70 0.25 29);
+  --sidebar:                    var(--surface);
+  --sidebar-foreground:         var(--text);
+  --sidebar-primary:            var(--primary);
+  --sidebar-primary-foreground: var(--on-primary);
+  --sidebar-accent:             var(--surface-sunken);
+  --sidebar-accent-foreground:  var(--text);
+  --sidebar-border:             var(--border);
+  --sidebar-ring:               var(--focus-ring);
 }
 
 @layer base {
   * {
     border-color: var(--color-border);
+  }
+
+  /* Anel de foco padrão para qualquer controle focável sem ring próprio */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
   }
 
   body {

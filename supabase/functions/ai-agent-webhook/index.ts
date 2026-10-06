@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import {
-  AIConfig,
   BufferItem,
   BufferItemTipo,
+  aiGlobalConfigurada,
   appendToBuffer,
   handleClaimedBuffer,
   jidToPhone,
@@ -119,9 +119,10 @@ serve(async (req) => {
       return ok({ skipped: `media type "${tipo}" without identifiable message id` })
     }
 
-    // Token da instância vem como query param
+    // Token da instância: query param (URL antiga) ou campo "token" do payload da UAZAPI
+    // (é assim que o disparo-webhook repassa as mensagens para cá)
     const reqUrl = new URL(req.url)
-    const token = reqUrl.searchParams.get('token')
+    const token = reqUrl.searchParams.get('token') || (typeof body?.token === 'string' ? body.token : null)
     if (!token) {
       return new Response(JSON.stringify({ ok: false, error: 'Missing token' }), {
         status: 400,
@@ -161,7 +162,7 @@ serve(async (req) => {
     // Busca o agente de IA desta instância
     const { data: aiConfig } = await supabase
       .from('ai_configuracoes')
-      .select('ativo, provedor, api_key, modelo, system_prompt, buffer_segundos, responder_audio, responder_imagem, openai_key_transcricao')
+      .select('ativo, buffer_segundos')
       .eq('instancia_id', instancia.id)
       .maybeSingle()
 
@@ -169,9 +170,10 @@ serve(async (req) => {
       return ok({ skipped: 'AI not enabled for instance' })
     }
 
-    if (!aiConfig?.api_key) {
-      console.log(`[ai-agent-webhook] AI config sem chave de API para instância ${instancia.id}`)
-      return ok({ skipped: 'AI config not found or missing API key' })
+    // A chave da IA é do sistema (segredo AI_OPENAI_API_KEY), não do agente
+    if (!aiGlobalConfigurada()) {
+      console.error('[ai-agent-webhook] segredo AI_OPENAI_API_KEY não configurado — mensagem ignorada')
+      return ok({ skipped: 'AI key not configured' })
     }
 
     // Monta o item do buffer para esta mensagem
@@ -182,7 +184,7 @@ serve(async (req) => {
     const myToken = crypto.randomUUID()
     await appendToBuffer(supabase, instancia.id, fromPhone, item, myToken)
 
-    const bufferSegundos = Math.max(0, Math.min(45, (aiConfig as AIConfig).buffer_segundos ?? 8))
+    const bufferSegundos = Math.max(0, Math.min(45, Number(aiConfig.buffer_segundos ?? 8)))
 
     // Responde ao webhook imediatamente — o processamento (esperar a janela
     // de buffer, decidir quem responde, chamar a IA, enviar) continua em

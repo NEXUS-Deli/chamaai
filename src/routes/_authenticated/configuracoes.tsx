@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff, AlertTriangle, Radio, ShieldCheck, Copy, Mail } from "lucide-react";
+import { Loader2, Trash2, QrCode, PowerOff, Smartphone, RefreshCw, CheckCircle2, WifiOff, AlertTriangle, Radio, ShieldCheck, Copy, Mail, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { canAddConnection } from "@/lib/plans";
 import { EmailCredentialsModal } from "@/components/email-credentials-modal";
@@ -90,6 +90,9 @@ function ConfigPage() {
   // Connection Modal States
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailEditId, setEmailEditId] = useState<string | null>(null);
+  const [emailAddMode, setEmailAddMode] = useState(false);
+  const [emailCreds, setEmailCreds] = useState<{ id: string; from_name: string; from_email: string; host: string; port: number }[]>([]);
   const [activeInstancia, setActiveInstancia] = useState<Instancia | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [connectStatus, setConnectStatus] = useState<"idle" | "loading" | "awaiting_scan" | "connected" | "error">("idle");
@@ -103,6 +106,7 @@ function ConfigPage() {
   useEffect(() => {
     fetchInstancias();
     fetchPlanInfo();
+    fetchEmailCreds();
     return () => {
       stopPolling();
       if (statusPollingRef.current) clearInterval(statusPollingRef.current);
@@ -123,6 +127,24 @@ function ConfigPage() {
     const plan = data.plans as { name: string; max_connections: number } | null;
     if (!plan) { setPlanInfo("no_plan"); return; }
     setPlanInfo({ name: plan.name, limit: plan.max_connections });
+  };
+
+  const fetchEmailCreds = async () => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const { data, error } = await supabase
+      .from("email_credentials")
+      .select("id, from_name, from_email, host, port")
+      .eq("usuario_id", u.user.id);
+    if (!error) setEmailCreds(data || []);
+  };
+
+  const removerEmailCred = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta credencial?")) return;
+    const { error } = await supabase.from("email_credentials").delete().eq("id", id);
+    if (error) return toast.error("Erro ao excluir: " + error.message);
+    toast.success("Credencial excluída!");
+    setEmailCreds((prev) => prev.filter((c) => c.id !== id));
   };
 
   const fetchInstancias = async () => {
@@ -217,7 +239,7 @@ function ConfigPage() {
       if (!limitCheck.allowed) {
         throw new Error(
           `Limite de conexões atingido para o seu plano (${limitCheck.current}/${limitCheck.limit}). ` +
-          `Faça upgrade para adicionar mais números.`
+          `Faça upgrade para adicionar mais conexões.`
         );
       }
 
@@ -442,28 +464,32 @@ function ConfigPage() {
     // Usa o status dinâmico se disponível, senão usa o do banco
     const status = statusMap[instId] ?? fallback;
     if (status === 'connected') return (
-      <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+      <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-success-subtle  text-success ">
+        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
         Conectado
       </span>
     );
     if (status === 'connecting') return (
-      <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+      <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-warning-subtle  text-warning ">
+        <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
         Conectando...
       </span>
     );
     return (
-      <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+      <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-muted  text-muted-foreground ">
+        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
         Desconectado
       </span>
     );
   };
 
+  // Conexões que contam para o plano: WhatsApp + credenciais de e-mail
+  const totalConexoes = instancias.length + emailCreds.length;
+  const planAtLimit = planInfo !== null && planInfo !== "no_plan" && totalConexoes >= planInfo.limit;
+
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchInstancias();
+    await Promise.all([fetchInstancias(), fetchEmailCreds()]);
     setRefreshing(false);
   };
 
@@ -471,8 +497,8 @@ function ConfigPage() {
     <div className="p-4 sm:p-8 w-full space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Gerenciar WhatsApp</h1>
-          <p className="text-sm text-muted-foreground">Crie novas instâncias e conecte seus números de WhatsApp usando a UAZAPI.</p>
+          <h1 className="text-2xl font-bold">Gerencie as suas Conexões</h1>
+          <p className="text-sm text-muted-foreground">Crie novas instâncias e conecte seus números de WhatsApp e endereços de E-mail</p>
         </div>
         <Button
           variant="outline"
@@ -486,23 +512,16 @@ function ConfigPage() {
         </Button>
       </div>
 
-      <div className="flex gap-4 items-center mb-6">
-        <Button onClick={() => setEmailModalOpen(true)} className="gap-2">
-          <Mail className="w-4 h-4" />
-          Credenciais de E-mail
-        </Button>
-      </div>
-
       {/* Banner de plano */}
       {planInfo === "no_plan" && (
-        <div className="flex items-center gap-3 rounded-lg border border-yellow-300 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-700 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
+        <div className="flex items-center gap-3 rounded-lg border border-warning/30 bg-warning-subtle   px-4 py-3 text-sm text-warning ">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>Nenhum plano ativo encontrado. Entre em contato com o suporte para ativar o seu plano.</span>
         </div>
       )}
       {planInfo && planInfo !== "no_plan" && (() => {
-        const atLimit = instancias.length >= planInfo.limit;
-        const pct = Math.min(100, Math.round((instancias.length / planInfo.limit) * 100));
+        const atLimit = totalConexoes >= planInfo.limit;
+        const pct = Math.min(100, Math.round((totalConexoes / planInfo.limit) * 100));
         return (
           <div className="flex items-center justify-between gap-4 rounded-lg border bg-card px-5 py-3">
             <div className="flex items-center gap-3">
@@ -510,7 +529,7 @@ function ConfigPage() {
                 Plano {planInfo.name}
               </Badge>
               <span className={`text-sm font-medium ${atLimit ? "text-destructive" : "text-muted-foreground"}`}>
-                {instancias.length}/{planInfo.limit} conexões utilizadas
+                {totalConexoes}/{planInfo.limit} conexões utilizadas
               </span>
             </div>
             <div className="flex items-center gap-2 min-w-[120px]">
@@ -526,12 +545,13 @@ function ConfigPage() {
         );
       })()}
 
+      <div className="grid gap-4 lg:grid-cols-2">
       <Card className="p-6 space-y-4">
         <h2 className="font-semibold">Nova Instância</h2>
-        {planInfo && planInfo !== "no_plan" && instancias.length >= planInfo.limit && (
+        {planInfo && planInfo !== "no_plan" && totalConexoes >= planInfo.limit && (
           <p className="text-sm text-destructive flex items-center gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-            Você atingiu o limite do seu plano. Faça upgrade para adicionar mais números.
+            Você atingiu o limite do seu plano. Faça upgrade para adicionar mais conexões.
           </p>
         )}
         <div className="flex gap-2">
@@ -540,14 +560,14 @@ function ConfigPage() {
             value={novaInstanciaNome}
             onChange={e => setNovaInstanciaNome(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addInstancia()}
-            disabled={planInfo !== null && planInfo !== "no_plan" && instancias.length >= planInfo.limit}
+            disabled={planInfo !== null && planInfo !== "no_plan" && totalConexoes >= planInfo.limit}
           />
           <Button
             onClick={addInstancia}
             disabled={
               loading ||
               !novaInstanciaNome.trim() ||
-              (planInfo !== null && planInfo !== "no_plan" && instancias.length >= planInfo.limit)
+              (planInfo !== null && planInfo !== "no_plan" && totalConexoes >= planInfo.limit)
             }
           >
             {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
@@ -556,100 +576,190 @@ function ConfigPage() {
         </div>
       </Card>
 
-      <div className="space-y-4">
-        <h2 className="font-semibold">Minhas Instâncias</h2>
-        {instancias.length === 0 && (
-          <p className="text-sm text-muted-foreground p-4 bg-muted rounded-md text-center">
-            Nenhuma instância cadastrada. Crie uma acima para começar.
+      <Card className="p-6 space-y-4">
+        <h2 className="font-semibold">Nova Credencial de E-mail</h2>
+        {planAtLimit && (
+          <p className="text-sm text-destructive flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            Você atingiu o limite do seu plano. Faça upgrade para adicionar mais conexões.
           </p>
         )}
-        <div className="grid gap-4 sm:grid-cols-2">
-          {instancias.map((inst) => {
-            const isWebhookLoading = loadingWebhook === inst.id;
-            return (
-              <Card key={inst.id} className="p-4 flex flex-col gap-3">
-                <div className="flex justify-between items-start">
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-lg flex items-center gap-2 truncate">
-                      <Smartphone className="w-4 h-4 text-primary shrink-0" />
-                      <span className="truncate">{inst.nome}</span>
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-1 font-mono truncate">
-                      {inst.instancia}
-                    </p>
-                    <div className="mt-1.5">{statusBadge(inst.id, inst.status)}</div>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={() => removerInstancia(inst)} disabled={loading} className="shrink-0">
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  </Button>
-                </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground">
+            Cadastre um servidor SMTP para enviar E-mail Marketing.
+          </p>
+          <Button
+            onClick={() => { setEmailEditId(null); setEmailAddMode(true); setEmailModalOpen(true); }}
+            disabled={planAtLimit || emailCreds.length >= 10}
+            className="gap-2"
+          >
+            <Mail className="w-4 h-4" />
+            Adicionar Credencial
+          </Button>
+        </div>
+      </Card>
+      </div>
 
-                {/* Rastreamento de entrega */}
-                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-muted/50 border">
-                  {inst.webhook_configurado ? (
-                    <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400 font-medium">
-                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                      Rastreamento de entrega ativo
+      <div className="space-y-4">
+        <h2 className="font-semibold">Minhas Conexões</h2>
+        <Card className="p-0 overflow-hidden">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
+            <thead className="text-left text-muted-foreground border-b">
+              <tr>
+                <th className="px-4 sm:px-6 py-3">Nome</th>
+                <th className="py-3">Status</th>
+                <th className="py-3 hidden md:table-cell">Detalhes</th>
+                <th className="text-right px-4 sm:px-6 py-3">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {instancias.map((inst) => {
+                const isWebhookLoading = loadingWebhook === inst.id;
+                return (
+                  <tr key={inst.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                    <td className="px-4 sm:px-6 py-3 max-w-[200px] sm:max-w-none">
+                      <div className="font-medium flex items-center gap-2 truncate">
+                        <Smartphone className="w-4 h-4 text-brand shrink-0" />
+                        <span className="truncate">{inst.nome}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+                        {inst.instancia}
+                      </p>
+                    </td>
+                    <td className="py-3">
+                      <div className="inline-flex">{statusBadge(inst.id, inst.status)}</div>
+                    </td>
+                    <td className="py-3 hidden md:table-cell">
+                      <div className="flex items-center gap-2">
+                        {inst.webhook_configurado ? (
+                          <div className="flex items-center gap-1.5 text-xs text-success font-medium whitespace-nowrap">
+                            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                            Rastreamento ativo
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-xs text-warning font-medium whitespace-nowrap">
+                            <Radio className="w-3.5 h-3.5 shrink-0" />
+                            Rastreamento inativo
+                          </div>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                          title="Copiar URL do webhook"
+                          onClick={() => {
+                            const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/disparo-webhook?token=${inst.token}`;
+                            navigator.clipboard.writeText(url);
+                            toast.success("URL do webhook copiada!");
+                          }}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                        {!inst.webhook_configurado && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-xs px-2"
+                            onClick={() => configurarWebhook(inst)}
+                            disabled={isWebhookLoading}
+                          >
+                            {isWebhookLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Ativar"}
+                          </Button>
+                        )}
+                        {inst.webhook_configurado && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs px-2 text-muted-foreground"
+                            onClick={() => configurarWebhook(inst)}
+                            disabled={isWebhookLoading}
+                          >
+                            {isWebhookLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Reconfigurar"}
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 sm:px-6 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button size="sm" className="text-xs" onClick={() => openConnectModal(inst)}>
+                          <QrCode className="w-4 h-4 mr-1.5" />
+                          Conectar
+                        </Button>
+                        <Button variant="outline" size="sm" className="text-xs" onClick={() => handleDisconnect(inst)}>
+                          <PowerOff className="w-4 h-4 mr-1.5" />
+                          Desconectar
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => removerInstancia(inst)}
+                          disabled={loading}
+                          title="Excluir instância"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {emailCreds.map((cred) => (
+                <tr key={cred.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                  <td className="px-4 sm:px-6 py-3 max-w-[200px] sm:max-w-none">
+                    <div className="font-medium flex items-center gap-2 truncate">
+                      <Mail className="w-4 h-4 text-brand shrink-0" />
+                      <span className="truncate">{cred.from_name}</span>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-xs text-yellow-700 dark:text-yellow-400 font-medium">
-                      <Radio className="w-3.5 h-3.5 shrink-0" />
-                      Rastreamento inativo
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                      title="Copiar URL do webhook"
-                      onClick={() => {
-                        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/disparo-webhook?token=${inst.token}`;
-                        navigator.clipboard.writeText(url);
-                        toast.success("URL do webhook copiada!");
-                      }}
-                    >
-                      <Copy className="w-3 h-3" />
-                    </Button>
-                    {!inst.webhook_configurado && (
+                    <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+                      {cred.from_email}
+                    </p>
+                  </td>
+                  <td className="py-3">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+                      E-mail SMTP
+                    </span>
+                  </td>
+                  <td className="py-3 hidden md:table-cell">
+                    <span className="text-xs text-muted-foreground font-mono">{cred.host}:{cred.port}</span>
+                  </td>
+                  <td className="px-4 sm:px-6 py-3">
+                    <div className="flex items-center justify-end gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-6 text-xs px-2"
-                        onClick={() => configurarWebhook(inst)}
-                        disabled={isWebhookLoading}
+                        className="text-xs"
+                        onClick={() => { setEmailEditId(cred.id); setEmailAddMode(false); setEmailModalOpen(true); }}
                       >
-                        {isWebhookLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Ativar"}
+                        <Pencil className="w-4 h-4 mr-1.5" />
+                        Editar
                       </Button>
-                    )}
-                    {inst.webhook_configurado && (
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-6 text-xs px-2 text-muted-foreground"
-                        onClick={() => configurarWebhook(inst)}
-                        disabled={isWebhookLoading}
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => removerEmailCred(cred.id)}
+                        title="Excluir credencial"
                       >
-                        {isWebhookLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Reconfigurar"}
+                        <Trash2 className="w-4 h-4" />
                       </Button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button variant="default" className="flex-1 text-xs" onClick={() => openConnectModal(inst)}>
-                    <QrCode className="w-4 h-4 mr-2" />
-                    Conectar
-                  </Button>
-                  <Button variant="outline" className="flex-1 text-xs" onClick={() => handleDisconnect(inst)}>
-                    <PowerOff className="w-4 h-4 mr-2" />
-                    Desconectar
-                  </Button>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {instancias.length === 0 && emailCreds.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-12 text-center text-muted-foreground">
+                    Nenhuma conexão cadastrada. Crie uma instância ou adicione uma credencial de e-mail para começar.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+          </div>
+        </Card>
       </div>
 
       <Dialog open={connectModalOpen} onOpenChange={(open) => !open && closeModal()}>
@@ -662,11 +772,11 @@ function ConfigPage() {
           </DialogHeader>
           <div className="flex flex-col items-center justify-center min-h-[300px] p-6 bg-muted/50 rounded-md">
             {connectStatus === 'connected' ? (
-              <div className="text-primary flex flex-col items-center">
-                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
-                  <CheckCircle2 className="w-8 h-8 text-green-600" />
+              <div className="text-brand flex flex-col items-center">
+                <div className="w-16 h-16 bg-success-subtle  rounded-full flex items-center justify-center mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-success" />
                 </div>
-                <h3 className="text-xl font-bold text-green-600">Conectado!</h3>
+                <h3 className="text-xl font-bold text-success">Conectado!</h3>
                 <p className="text-sm mt-2 text-center text-muted-foreground">Sua instância está pronta para enviar campanhas.</p>
               </div>
             ) : connectStatus === 'error' ? (
@@ -686,13 +796,13 @@ function ConfigPage() {
                   className="w-64 h-64 mx-auto rounded-md shadow-sm border bg-white p-2"
                 />
                 <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
-                  <RefreshCw className="w-3 h-3 animate-spin text-primary" />
+                  <RefreshCw className="w-3 h-3 animate-spin text-brand" />
                   Aguardando leitura do QR Code...
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-center text-muted-foreground">
-                <Loader2 className="w-8 h-8 animate-spin mb-4 text-primary" />
+                <Loader2 className="w-8 h-8 animate-spin mb-4 text-brand" />
                 <p>Gerando QR Code...</p>
                 <p className="text-xs mt-2 opacity-60">Aguarde alguns segundos</p>
               </div>
@@ -705,8 +815,11 @@ function ConfigPage() {
       </Dialog>
       
       <EmailCredentialsModal 
-        isOpen={emailModalOpen} 
-        onClose={() => setEmailModalOpen(false)} 
+        isOpen={emailModalOpen}
+        editId={emailEditId}
+        startAdding={emailAddMode}
+        onClose={() => { setEmailModalOpen(false); setEmailEditId(null); setEmailAddMode(false); }}
+        onChanged={fetchEmailCreds}
       />
     </div>
   );

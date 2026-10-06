@@ -81,6 +81,43 @@ async function buscarDestinatariosLeads(
   return Array.from(telefones)
 }
 
+// Extrai o ID da mensagem devolvido pela UAZAPI em /send/status (ex.: { Id: "3EB0..." }).
+// Mesmo formato normalizado do disparo-cron: "PHONE:HEX" vira só "HEX".
+function extrairMensagemId(respData: unknown): string | null {
+  const d = respData as Record<string, any> | null
+  const raw = d?.Id ?? d?.id ?? d?.key?.id ?? d?.messageid ?? d?.messageId
+  if (!raw || typeof raw !== 'string') return null
+  return raw.includes(':') ? (raw.split(':').pop() ?? raw) : raw
+}
+
+// Registra o envio do story para que o disparo-webhook possa contar as visualizações.
+// Nunca lança erro: uma falha aqui não pode afetar a publicação do story.
+async function registrarEnvioStory(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  agendamentoId: string,
+  usuarioId: string,
+  instanciaId: string,
+  respData: unknown,
+): Promise<void> {
+  try {
+    const mensagemId = extrairMensagemId(respData)
+    if (!mensagemId) {
+      console.warn(`[stories-cron] Resposta sem ID de mensagem — visualizações não serão contadas (agendamento ${agendamentoId})`)
+      return
+    }
+    const { error } = await supabase.from("stories_envios").insert({
+      agendamento_id: agendamentoId,
+      usuario_id: usuarioId,
+      instancia_id: instanciaId,
+      mensagem_id: mensagemId,
+    })
+    if (error) console.error(`[stories-cron] Erro ao registrar envio ${mensagemId}:`, error.message)
+  } catch (e) {
+    console.error("[stories-cron] Exceção ao registrar envio:", e instanceof Error ? e.message : String(e))
+  }
+}
+
 serve(async () => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
@@ -207,6 +244,7 @@ serve(async () => {
         } else {
           console.log(`[stories-cron] OK: ${inst.nome} (enviado para ${recipientsFinal.length} contatos)`)
           resultados.push({ instancia: inst.nome, ok: true, debug: debugInfo, destinatarios: recipientsFinal.length })
+          await registrarEnvioStory(supabase, ag.id, ag.usuario_id, inst.id, respData)
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)

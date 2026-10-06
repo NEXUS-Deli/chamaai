@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Mail } from "lucide-react";
+import { Plus, Trash2, Mail, Users, Send, AlertCircle } from "lucide-react";
+import { MetricGrid, Metric } from "@/components/metric-grid";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -31,12 +32,12 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  aguardando: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  agendada: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  em_andamento: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  pausada: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+  aguardando: "bg-warning-subtle text-warning  ",
+  agendada: "bg-info-subtle text-info  ",
+  em_andamento: "bg-success-subtle text-success  ",
+  pausada: "bg-warning-subtle text-warning  ",
   concluida: "bg-muted text-muted-foreground",
-  cancelada: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  cancelada: "bg-danger-subtle text-danger  ",
 };
 
 function EmailMarketingList() {
@@ -74,15 +75,22 @@ function EmailMarketingList() {
     },
   });
 
+  const lista = data ?? [];
+  const totais = {
+    campanhas: lista.length,
+    contatos: lista.reduce((acc, c) => acc + (c.total_contatos ?? 0), 0),
+    enviadas: lista.reduce((acc, c) => acc + (c.enviadas ?? 0), 0),
+    erros: lista.reduce((acc, c) => acc + (c.erros ?? 0), 0),
+  };
+
   return (
     <div className="p-8 w-full space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Mail className="w-6 h-6 text-primary" />
+          <h1 className="text-2xl font-bold">
             E-mail Marketing
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground">
             Gerencie seus disparos de e-mail em massa
           </p>
         </div>
@@ -93,6 +101,19 @@ function EmailMarketingList() {
           </Button>
         </Link>
       </div>
+
+      <MetricGrid>
+        <Metric label="Campanhas"        value={totais.campanhas}                          icon={Mail}        note="criadas" />
+        <Metric label="Contatos"         value={totais.contatos.toLocaleString("pt-BR")}   icon={Users}       note="nas campanhas" />
+        <Metric label="E-mails enviados" value={totais.enviadas.toLocaleString("pt-BR")}   icon={Send}        note="no total" />
+        <Metric
+          label="Erros"
+          value={totais.erros.toLocaleString("pt-BR")}
+          icon={AlertCircle}
+          note="falhas de envio"
+          tone={totais.erros > 0 ? "danger" : undefined}
+        />
+      </MetricGrid>
 
       <Card className="p-0 overflow-hidden">
         <div className="overflow-x-auto">
@@ -135,7 +156,7 @@ function EmailMarketingList() {
                       <Link
                         to="/email-marketing/$id"
                         params={{ id: c.id }}
-                        className="text-primary hover:underline text-sm font-medium"
+                        className="text-brand hover:underline text-sm font-medium"
                       >
                         Ver
                       </Link>
@@ -182,7 +203,7 @@ function EmailMarketingList() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground ring-0 before:hidden [&_svg]:text-destructive-foreground"
               onClick={() => { if (campanhaToDelete) deleteMutation.mutate(campanhaToDelete); }}
               disabled={deleteMutation.isPending}
             >

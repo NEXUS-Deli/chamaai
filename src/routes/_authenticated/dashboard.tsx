@@ -10,6 +10,7 @@ import {
   Clock, Clapperboard, ArrowRight, Loader2, MessageSquare, CalendarDays,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { classeFiltro } from "@/lib/selecao";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -250,35 +251,27 @@ function Dashboard() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-base text-muted-foreground mt-1 capitalize">
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground first-letter:uppercase">
             {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
           </p>
         </div>
 
         {/* Filtro de período */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center rounded-lg border bg-card p-0.5 gap-0.5">
+          <div className="flex items-center rounded-lg border bg-muted/60 p-1 gap-1">
             {(["7d", "15d", "30d"] as Periodo[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriodo(p)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  periodo === p
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={classeFiltro(periodo === p)}
               >
                 {p === "7d" ? "7 dias" : p === "15d" ? "15 dias" : "30 dias"}
               </button>
             ))}
             <button
               onClick={() => setPeriodo("custom")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                periodo === "custom"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`flex items-center gap-1.5 ${classeFiltro(periodo === "custom")}`}
             >
               <CalendarDays className="w-3.5 h-3.5" /> Personalizado
             </button>
@@ -336,7 +329,7 @@ function Dashboard() {
                   <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: "var(--primary)" }} /> Enviadas
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: "#ef4444" }} /> Falhas
+                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: "var(--danger)" }} /> Falhas
                 </span>
               </div>
             </div>
@@ -354,8 +347,8 @@ function Dashboard() {
                       <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gradFalhas" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#ef4444" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                      <stop offset="5%"  stopColor="var(--danger)" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="var(--danger)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -387,37 +380,35 @@ function Dashboard() {
                     ]}
                   />
                   <Area type="monotone" dataKey="enviadas" stroke="var(--primary)" strokeWidth={2} fill="url(#gradEnviadas)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-                  <Area type="monotone" dataKey="falhas"   stroke="#ef4444"        strokeWidth={2} fill="url(#gradFalhas)"   dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+                  <Area type="monotone" dataKey="falhas"   stroke="var(--danger)"        strokeWidth={2} fill="url(#gradFalhas)"   dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
           </div>
 
           {/* Conteúdo principal */}
-          <div className="grid lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-border rounded-xl overflow-hidden border">
 
             {/* Campanhas recentes */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold">Campanhas recentes</h2>
-                <Link to="/campanhas" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors">
-                  Ver todas <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
+            <SectionCard title="Campanhas recentes" link={{ label: "Ver todas", to: "/campanhas" }}>
               {data!.recentesCamps.length === 0 ? (
-                <EmptyState label="Nenhuma campanha no período" action={{ label: "Criar campanha", to: "/campanhas/nova" }} />
+                <EmptyState
+                  icon={Send}
+                  label="Nenhuma campanha no período"
+                  action={{ label: "Criar campanha", to: "/campanhas/nova" }}
+                />
               ) : (
-                <div className="space-y-1">
+                <div className="divide-y">
                   {data!.recentesCamps.map((c) => (
                     <Link
                       key={c.id}
                       to="/campanhas/$id"
                       params={{ id: c.id }}
-                      className="flex items-center justify-between py-4 px-4 rounded-lg hover:bg-muted/40 transition-colors"
+                      className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-muted/50 transition-colors"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{c.nome}</p>
-                        <p className="text-sm text-muted-foreground mt-0.5">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {c.total_contatos ?? 0} contatos · {new Date(c.criada_em).toLocaleDateString("pt-BR")}
                         </p>
                       </div>
@@ -426,41 +417,38 @@ function Dashboard() {
                   ))}
                 </div>
               )}
-            </div>
+            </SectionCard>
 
-            {/* Próximos stories + ações rápidas */}
-            <div className="space-y-8">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold">Próximos stories</h2>
-                  <Link to="/stories" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors">
-                    Ver todos <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-                {data!.proximosStories.length === 0 ? (
-                  <EmptyState label="Nenhum story agendado" action={{ label: "Agendar story", to: "/stories" }} />
-                ) : (
-                  <div className="space-y-1">
-                    {data!.proximosStories.map((s) => (
-                      <div key={s.id} className="flex items-center gap-3 py-4 px-4 rounded-lg">
-                        <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{s.titulo}</p>
-                          <p className="text-sm text-muted-foreground mt-0.5">
-                            {new Date(s.agendado_para).toLocaleString("pt-BR", {
-                              day: "2-digit", month: "2-digit",
-                              hour: "2-digit", minute: "2-digit",
-                            })}
-                          </p>
-                        </div>
-                        <span className="text-sm text-muted-foreground capitalize shrink-0">{s.tipo}</span>
+            {/* Próximos stories */}
+            <SectionCard title="Próximos stories" link={{ label: "Ver todos", to: "/stories" }}>
+              {data!.proximosStories.length === 0 ? (
+                <EmptyState
+                  icon={Clapperboard}
+                  label="Nenhum story agendado"
+                  action={{ label: "Agendar story", to: "/stories" }}
+                />
+              ) : (
+                <div className="divide-y">
+                  {data!.proximosStories.map((s) => (
+                    <div key={s.id} className="flex items-center gap-3 px-5 py-3.5">
+                      <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{s.titulo}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {new Date(s.agendado_para).toLocaleString("pt-BR", {
+                            day: "2-digit", month: "2-digit",
+                            hour: "2-digit", minute: "2-digit",
+                          })}
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-            </div>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground capitalize shrink-0">
+                        {s.tipo}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
           </div>
         </>
       )}
@@ -481,7 +469,7 @@ function Metric({
     <div className="bg-card px-5 py-4 flex items-start justify-between gap-3">
       <div>
         <p className="text-xs text-muted-foreground mb-1.5">{label}</p>
-        <p className={`text-xl font-bold tracking-tight ${active ? "text-primary" : ""}`}>{value}</p>
+        <p className={`text-xl font-bold tracking-tight ${active ? "text-brand" : ""}`}>{value}</p>
         {note && <p className="text-xs text-muted-foreground mt-1">{note}</p>}
       </div>
       <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -498,7 +486,7 @@ function WhatsAppMetric({ conectadas, limite }: { conectadas: number; limite: nu
     <div className="bg-card px-5 py-4 flex items-start justify-between gap-3">
       <div className="flex-1 min-w-0">
         <p className="text-xs text-muted-foreground mb-1.5">WhatsApp conectados</p>
-        <p className={`text-xl font-bold tracking-tight ${conectadas > 0 ? "text-primary" : ""}`}>
+        <p className={`text-xl font-bold tracking-tight ${conectadas > 0 ? "text-brand" : ""}`}>
           {conectadas}{hasPlan ? `/${limite}` : ""}
         </p>
         {hasPlan ? (
@@ -524,27 +512,54 @@ function WhatsAppMetric({ conectadas, limite }: { conectadas: number; limite: nu
   );
 }
 
-function EmptyState({ label, action }: { label: string; action: { label: string; to: string } }) {
+function SectionCard({
+  title, link, children,
+}: {
+  title: string;
+  link: { label: string; to: string };
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex items-center justify-between py-4 px-4 rounded-lg border border-dashed">
+    <div className="bg-card flex flex-col">
+      <div className="flex items-center justify-between gap-4 px-5 py-4 border-b">
+        <h2 className="text-base font-semibold">{title}</h2>
+        <Link to={link.to} className="text-sm text-muted-foreground hover:text-brand flex items-center gap-1 transition-colors">
+          {link.label} <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+      <div className="flex-1 flex flex-col">{children}</div>
+    </div>
+  );
+}
+
+function EmptyState({
+  icon: Icon, label, action,
+}: {
+  icon: React.ElementType;
+  label: string;
+  action: { label: string; to: string };
+}) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-2 px-5 py-12 text-center">
+      <Icon className="w-8 h-8 text-muted-foreground/50" />
       <p className="text-sm text-muted-foreground">{label}</p>
-      <Link to={action.to} className="text-xs text-primary hover:underline flex items-center gap-1">
-        {action.label} <ArrowRight className="w-3 h-3" />
+      <Link to={action.to} className="text-sm font-medium text-brand hover:underline flex items-center gap-1">
+        {action.label} <ArrowRight className="w-3.5 h-3.5" />
       </Link>
     </div>
   );
 }
 
 const STATUS_MAP: Record<string, { label: string; class: string }> = {
-  rascunho:     { label: "Rascunho",     class: "text-muted-foreground" },
-  agendada:     { label: "Agendada",     class: "text-blue-500" },
-  em_andamento: { label: "Em andamento", class: "text-yellow-500" },
-  pausada:      { label: "Pausada",      class: "text-orange-500" },
-  concluida:    { label: "Concluída",    class: "text-green-500" },
-  cancelada:    { label: "Cancelada",    class: "text-destructive" },
+  rascunho:     { label: "Rascunho",     class: "bg-muted text-muted-foreground" },
+  agendada:     { label: "Agendada",     class: "bg-info-subtle text-info" },
+  em_andamento: { label: "Em andamento", class: "bg-warning-subtle text-warning" },
+  pausada:      { label: "Pausada",      class: "bg-warning-subtle text-warning" },
+  concluida:    { label: "Concluída",    class: "bg-success-subtle text-success" },
+  cancelada:    { label: "Cancelada",    class: "bg-danger-subtle text-danger" },
 };
 
 function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_MAP[status] ?? { label: status, class: "text-muted-foreground" };
-  return <span className={`text-xs font-medium shrink-0 ml-4 ${cfg.class}`}>{cfg.label}</span>;
+  const cfg = STATUS_MAP[status] ?? { label: status, class: "bg-muted text-muted-foreground" };
+  return <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${cfg.class}`}>{cfg.label}</span>;
 }

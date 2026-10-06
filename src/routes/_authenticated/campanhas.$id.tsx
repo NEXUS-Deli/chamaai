@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Pause, Play, X, Loader2, FileText, ImageIcon, Video, Download, Filter, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { classeChip } from "@/lib/selecao";
 
 export const Route = createFileRoute("/_authenticated/campanhas/$id")({
   component: Detalhes,
@@ -214,21 +215,21 @@ function Detalhes() {
   };
 
   const statusColor: Record<string, string> = {
-    aguardando: "bg-yellow-100 text-yellow-800",
-    agendada: "bg-blue-100 text-blue-800",
-    em_andamento: "bg-green-100 text-green-800",
-    pausada: "bg-orange-100 text-orange-800",
+    aguardando: "bg-warning-subtle text-warning",
+    agendada: "bg-info-subtle text-info",
+    em_andamento: "bg-success-subtle text-success",
+    pausada: "bg-warning-subtle text-warning",
     concluida: "bg-muted text-muted-foreground",
-    cancelada: "bg-red-100 text-red-800",
+    cancelada: "bg-danger-subtle text-danger",
   };
 
   const contatoStatusColor: Record<string, string> = {
-    pendente: "bg-yellow-100 text-yellow-800",
-    enviado: "bg-blue-100 text-blue-800",
-    entregue: "bg-green-100 text-green-800",
+    pendente: "bg-warning-subtle text-warning",
+    enviado: "bg-info-subtle text-info",
+    entregue: "bg-success-subtle text-success",
     lido: "bg-purple-100 text-purple-800",
-    invalido: "bg-red-100 text-red-800",
-    erro: "bg-red-100 text-red-800",
+    invalido: "bg-danger-subtle text-danger",
+    erro: "bg-danger-subtle text-danger",
     cancelado: "bg-muted text-muted-foreground",
   };
 
@@ -279,7 +280,7 @@ function Detalhes() {
               </span>
             )}
             {camp.recorrente && (
-              <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+              <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-brand">
                 <RefreshCw className="w-3 h-3" />
                 Repete a cada {camp.recorrencia_intervalo_dias} dia{camp.recorrencia_intervalo_dias !== 1 ? "s" : ""}
                 {(camp.recorrencia_dias_excluidos?.length ?? 0) > 0 &&
@@ -336,14 +337,14 @@ function Detalhes() {
           <div className="pt-2 space-y-1.5">
             {estaForaDoHorario(camp.horario_inicio ?? "08:00", camp.horario_fim ?? "22:00") ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-warning" />
                 <span>Fora do horário de disparo — retoma às {camp.horario_inicio ?? "08:00"}</span>
               </div>
             ) : secondsLeft !== null && secondsLeft > 0 ? (
               <>
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Próximo disparo em</span>
-                  <span className="tabular-nums font-semibold text-primary">{secondsLeft}s</span>
+                  <span className="tabular-nums font-semibold text-brand">{secondsLeft}s</span>
                 </div>
                 <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-primary/15">
                   <div
@@ -472,11 +473,7 @@ function Detalhes() {
               <button
                 key={s}
                 onClick={() => setFiltroStatus(s)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                  filtroStatus === s
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
+                className={classeChip(filtroStatus === s)}
               >
                 {s === "todos" ? `Todos (${contatos.length})` : `${contatoStatusLabel[s] ?? s} (${contatos.filter((c) => c.status === s).length})`}
               </button>

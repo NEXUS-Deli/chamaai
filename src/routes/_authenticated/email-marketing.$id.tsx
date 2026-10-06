@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Pause, Play, X, Loader2, Filter, Download, Mail, RefreshCw, RotateCcw } from "lucide-react";
+import { Pause, Play, X, Loader2, Filter, Download, RefreshCw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { classeChip } from "@/lib/selecao";
 
 export const Route = createFileRoute("/_authenticated/email-marketing/$id")({
   component: EmailCampanhaDetalhes,
@@ -127,14 +128,14 @@ function EmailCampanhaDetalhes() {
     pausada: "Pausada", concluida: "Concluída", cancelada: "Cancelada",
   };
   const STATUS_COLOR: Record<string, string> = {
-    aguardando: "bg-yellow-100 text-yellow-800", agendada: "bg-blue-100 text-blue-800",
-    em_andamento: "bg-green-100 text-green-800", pausada: "bg-orange-100 text-orange-800",
-    concluida: "bg-muted text-muted-foreground", cancelada: "bg-red-100 text-red-800",
+    aguardando: "bg-warning-subtle text-warning", agendada: "bg-info-subtle text-info",
+    em_andamento: "bg-success-subtle text-success", pausada: "bg-warning-subtle text-warning",
+    concluida: "bg-muted text-muted-foreground", cancelada: "bg-danger-subtle text-danger",
   };
   const CONTATO_STATUS_COLOR: Record<string, string> = {
-    pendente: "bg-yellow-100 text-yellow-800", enviado: "bg-blue-100 text-blue-800",
-    entregue: "bg-green-100 text-green-800", lido: "bg-purple-100 text-purple-800",
-    invalido: "bg-red-100 text-red-800", erro: "bg-red-100 text-red-800",
+    pendente: "bg-warning-subtle text-warning", enviado: "bg-info-subtle text-info",
+    entregue: "bg-success-subtle text-success", lido: "bg-purple-100 text-purple-800",
+    invalido: "bg-danger-subtle text-danger", erro: "bg-danger-subtle text-danger",
     cancelado: "bg-muted text-muted-foreground",
   };
   const CONTATO_STATUS_LABEL: Record<string, string> = {
@@ -161,10 +162,7 @@ function EmailCampanhaDetalhes() {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Mail className="w-6 h-6 text-primary" />
-            {camp.nome}
-          </h1>
+          <h1 className="text-2xl font-bold">{camp.nome}</h1>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLOR[camp.status] ?? "bg-muted"}`}>
               {STATUS_LABEL[camp.status] ?? camp.status}
@@ -225,7 +223,7 @@ function EmailCampanhaDetalhes() {
             {secondsLeft !== null && secondsLeft > 0 ? (
               <>
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                <span>Próximo envio em <strong className="text-primary">{secondsLeft}s</strong></span>
+                <span>Próximo envio em <strong className="text-brand">{secondsLeft}s</strong></span>
               </>
             ) : (
               <>
@@ -278,9 +276,7 @@ function EmailCampanhaDetalhes() {
               <button
                 key={s}
                 onClick={() => setFiltroStatus(s)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                  filtroStatus === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
+                className={classeChip(filtroStatus === s)}
               >
                 {s === "todos" ? `Todos (${contatos.length})` : `${CONTATO_STATUS_LABEL[s] ?? s} (${contatos.filter((c) => c.status === s).length})`}
               </button>

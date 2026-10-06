@@ -7,6 +7,44 @@ export const UAZAPI_BASE_URL = Deno.env.get('UAZAPI_BASE_URL') ?? 'https://nexus
 
 export type AIProvider = 'openai' | 'claude' | 'gemini' | 'groq'
 
+// ── Configuração global da IA (fornecida pelo sistema) ──────────────────────
+// A chave fica SOMENTE nos segredos das Edge Functions (Supabase → Edge Functions
+// → Secrets). Nunca é gravada no banco nem enviada ao navegador. Provedor e
+// modelo também são definidos aqui — o que estiver na linha do agente é ignorado.
+const AI_OPENAI_API_KEY = (Deno.env.get('AI_OPENAI_API_KEY') ?? '').trim()
+const AI_MODEL = (Deno.env.get('AI_MODEL') ?? '').trim() || 'gpt-4o-mini'
+
+function intEnv(name: string, padrao: number): number {
+  const n = Number(Deno.env.get(name))
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : padrao
+}
+
+/** Travas contra gasto descontrolado (ajustáveis por segredo, sem novo deploy). */
+export const LIMITES = {
+  respostasPorUsuarioDia: intEnv('AI_LIMITE_USUARIO_DIA', 300),
+  respostasGlobalDia: intEnv('AI_LIMITE_GLOBAL_DIA', 3000),
+  respostasPorContatoHora: intEnv('AI_LIMITE_CONTATO_HORA', 20),
+  maxTokensResposta: 500,
+  maxCaracteresEntrada: 4000,
+  maxImagensPorLote: 2,
+  maxTentativas: 3,
+}
+
+export function aiGlobalConfigurada(): boolean {
+  return AI_OPENAI_API_KEY.length > 0
+}
+
+/** Aplica provedor/modelo/chave globais sobre a configuração do agente. */
+function aplicarConfigGlobal(row: Record<string, unknown>): AIConfig {
+  return {
+    ...(row as unknown as AIConfig),
+    provedor: 'openai',
+    api_key: AI_OPENAI_API_KEY,
+    modelo: AI_MODEL,
+    openai_key_transcricao: AI_OPENAI_API_KEY,
+  }
+}
+
 export interface AIConfig {
   provedor: AIProvider
   api_key: string
@@ -23,6 +61,8 @@ export interface AIConfig {
   mensagem_fora_horario: string | null
   transferencia_ativa: boolean
   transferencia_telefone: string | null
+  /** JID de número ou grupo que recebe o aviso de transferência */
+  transferencia_destino: string | null
 }
 
 /** Marca que a IA inclui no final da resposta quando decide transferir para um humano — removida antes de qualquer envio/gravação. */
@@ -40,6 +80,8 @@ export interface BufferItem {
   texto?: string
   media_id?: string
   criado_em: string
+  /** Quantas vezes o lote com este item já falhou (descartado ao atingir LIMITES.maxTentativas) */
+  tentativas?: number
 }
 
 export interface ContentPart {
@@ -290,7 +332,9 @@ async function resolveBufferItem(item: BufferItem, aiConfig: AIConfig, token: st
       return { texto: '[O contato enviou uma imagem, mas não foi possível baixá-la para análise agora.]' }
     }
     return {
-      texto: '[O contato enviou uma imagem — veja o conteúdo anexado]',
+      // Instrução direta: um texto entre colchetes ("[enviou uma imagem]") fazia o modelo
+      // achar que a imagem não tinha chegado e responder "não consigo visualizar".
+      texto: 'O cliente enviou a imagem anexada a esta mensagem. Analise o que aparece nela e responda com base no conteúdo da imagem.',
       imagem: { type: 'image', mimeType: result.mimetype, base64: result.base64Data },
     }
   }
@@ -302,16 +346,25 @@ async function resolveBufferItem(item: BufferItem, aiConfig: AIConfig, token: st
 
 // ── Chamada ao provedor de IA (multimodal: texto + imagens do turno atual) ─
 
+export interface AIResult {
+  texto: string
+  tokensEntrada: number
+  tokensSaida: number
+}
+
 export async function callAI(
   config: AIConfig,
   history: ConversaMessage[],
   currentText: string,
   currentImages: ContentPart[],
-): Promise<string> {
+): Promise<AIResult> {
   const model = config.modelo || DEFAULT_MODELS[config.provedor] || DEFAULT_MODELS.openai
   let systemPrompt = config.system_prompt || 'Você é um assistente útil do WhatsApp. Responda de forma breve e natural em português.'
   if (config.transferencia_ativa) {
     systemPrompt += `\n\nSe o cliente pedir para falar com um atendente humano, ou se a situação estiver além do que você consegue resolver, termine sua resposta incluindo exatamente a marca ${HANDOFF_MARKER} (o cliente nunca vê essa marca — ela é removida automaticamente antes do envio).`
+  }
+  if (currentImages.length > 0) {
+    systemPrompt += '\n\nVocê CONSEGUE ver as imagens enviadas pelo cliente: elas chegam anexadas à mensagem dele. Analise o conteúdo visual (objetos, textos, documentos, produtos, prints) e responda com base no que vê. Nunca diga que não consegue ver ou abrir imagens — mesmo que tenha dito isso antes nesta conversa.'
   }
   const historyMessages = history.map(h => ({ role: h.role, content: h.mensagem }))
 
@@ -330,7 +383,7 @@ export async function callAI(
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1024,
+        max_tokens: LIMITES.maxTokensResposta,
         system: systemPrompt,
         messages: [...historyMessages, { role: 'user', content: contentBlocks }],
       }),
@@ -340,7 +393,7 @@ export async function callAI(
       throw new Error(`Claude API ${res.status}: ${err.slice(0, 200)}`)
     }
     const data = await res.json()
-    return data.content[0].text
+    return { texto: data.content[0].text, tokensEntrada: data.usage?.input_tokens ?? 0, tokensSaida: data.usage?.output_tokens ?? 0 }
   }
 
   if (config.provedor === 'gemini') {
@@ -363,6 +416,7 @@ export async function callAI(
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: geminiContents,
+        generationConfig: { maxOutputTokens: LIMITES.maxTokensResposta },
       }),
     })
     if (!res.ok) {
@@ -370,7 +424,11 @@ export async function callAI(
       throw new Error(`Gemini API ${res.status}: ${err.slice(0, 200)}`)
     }
     const data = await res.json()
-    return data.candidates[0].content.parts[0].text
+    return {
+      texto: data.candidates[0].content.parts[0].text,
+      tokensEntrada: data.usageMetadata?.promptTokenCount ?? 0,
+      tokensSaida: data.usageMetadata?.candidatesTokenCount ?? 0,
+    }
   }
 
   // OpenAI e Groq (API compatível)
@@ -381,7 +439,8 @@ export async function callAI(
   const userContent = currentImages.length > 0
     ? [
         { type: 'text', text: currentText },
-        ...currentImages.map(img => ({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.base64}` } })),
+        // detail "low": imagem analisada em 512px — custo fixo, cerca de 13x menor que "auto"/"high"
+        ...currentImages.map(img => ({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.base64}`, detail: 'low' } })),
       ]
     : currentText
 
@@ -398,7 +457,7 @@ export async function callAI(
         ...historyMessages,
         { role: 'user', content: userContent },
       ],
-      max_tokens: 1000,
+      max_tokens: LIMITES.maxTokensResposta,
     }),
   })
   if (!res.ok) {
@@ -406,7 +465,9 @@ export async function callAI(
     throw new Error(`${config.provedor} API ${res.status}: ${err.slice(0, 200)}`)
   }
   const data = await res.json()
-  return data.choices[0].message.content
+  const texto = data.choices?.[0]?.message?.content
+  if (typeof texto !== 'string' || !texto.trim()) throw new Error(`${config.provedor} API: resposta vazia`)
+  return { texto, tokensEntrada: data.usage?.prompt_tokens ?? 0, tokensSaida: data.usage?.completion_tokens ?? 0 }
 }
 
 // ── Fora do horário comercial configurado: caminho leve, sem IA ─────────────
@@ -432,7 +493,18 @@ async function handleOutsideHours(
     mensagem: combinedText || '[mensagem fora do horário comercial]',
   })
 
-  if (aiConfig.mensagem_fora_horario?.trim()) {
+  // Envia a mensagem automática no máximo uma vez a cada 12h por contato (evita repetir a cada mensagem)
+  const dozeHorasAtras = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
+  const { count: avisosRecentes } = await supabase
+    .from('ai_conversas')
+    .select('id', { count: 'exact', head: true })
+    .eq('instancia_id', instancia.id)
+    .eq('numero', fromPhone)
+    .eq('role', 'assistant')
+    .eq('mensagem', aiConfig.mensagem_fora_horario ?? '')
+    .gte('criado_em', dozeHorasAtras)
+
+  if (aiConfig.mensagem_fora_horario?.trim() && (avisosRecentes ?? 0) === 0) {
     await sendText(fromJid, aiConfig.mensagem_fora_horario, instancia.token, { readchat: true, readmessages: true })
     await supabase.from('ai_conversas').insert({
       usuario_id: instancia.usuario_id,
@@ -465,10 +537,19 @@ async function handleHandoff(
   }, { onConflict: 'instancia_id,telefone' })
 
   const resumo = ultimaMensagem.slice(0, 200)
-  const aviso = `🔔 *Atendimento humano solicitado*\nContato: ${fromPhone}\nÚltima mensagem: "${resumo}"`
+  const aviso = `🔔 *Lead aguardando atendimento humano*\n\n` +
+    `Contato: +${fromPhone}\n` +
+    `Conversar: https://wa.me/${fromPhone}\n` +
+    `Última mensagem: "${resumo}"\n\n` +
+    `A IA parou de responder este contato. Para reativar, remova-o de "Contatos Excluídos" no Atendimento com IA.`
 
-  if (aiConfig.transferencia_telefone) {
-    await sendText(toJid(aiConfig.transferencia_telefone), aviso, instancia.token)
+  // Destino escolhido na tela (número ou grupo); "transferencia_telefone" é o formato antigo
+  const destino = aiConfig.transferencia_destino
+    || (aiConfig.transferencia_telefone ? toJid(aiConfig.transferencia_telefone) : null)
+  if (destino) {
+    await sendText(destino, aviso, instancia.token)
+  } else {
+    console.warn(`[ai-agent-core] transferência de ${fromPhone} sem destino configurado — só notificação no painel`)
   }
 
   await supabase.from('notificacoes').insert({
@@ -493,13 +574,52 @@ export async function processarLote(
   if (items.length === 0) return
 
   try {
+    // Trava 1: limite de respostas por contato por hora (evita loop com outro robô / abuso)
+    const umaHoraAtras = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { count: respostasUltimaHora } = await supabase
+      .from('ai_conversas')
+      .select('id', { count: 'exact', head: true })
+      .eq('instancia_id', instancia.id)
+      .eq('numero', fromPhone)
+      .eq('role', 'assistant')
+      .gte('criado_em', umaHoraAtras)
+    if ((respostasUltimaHora ?? 0) >= LIMITES.respostasPorContatoHora) {
+      console.warn(`[ai-agent-core] limite por contato atingido (${respostasUltimaHora}/h) para ${fromPhone} — lote ignorado`)
+      return
+    }
+
+    // Trava 2: cota diária por usuário + teto global (atômico no banco)
+    const { data: cota, error: cotaErr } = await supabase.rpc('ai_consumir_cota', {
+      p_usuario_id: instancia.usuario_id,
+      p_limite_usuario: LIMITES.respostasPorUsuarioDia,
+      p_limite_global: LIMITES.respostasGlobalDia,
+    })
+    if (cotaErr) throw new Error(`ai_consumir_cota: ${cotaErr.message}`)
+    if (cota !== 'ok') {
+      console.warn(`[ai-agent-core] cota "${cota}" atingida (usuário ${instancia.usuario_id}) — ${fromPhone} não respondido`)
+      const { data: primeiroAviso } = await supabase.rpc('ai_marcar_aviso_limite', { p_usuario_id: instancia.usuario_id })
+      if (primeiroAviso === true) {
+        await supabase.from('notificacoes').insert({
+          usuario_id: instancia.usuario_id,
+          titulo: 'Limite diário do Atendimento com IA atingido',
+          mensagem: cota === 'limite_usuario'
+            ? `O agente respondeu ${LIMITES.respostasPorUsuarioDia} mensagens hoje e pausou até amanhã.`
+            : 'O agente foi pausado temporariamente pelo limite do sistema e volta amanhã.',
+          tipo: 'aviso',
+          link: '/atendimento-ia',
+        })
+      }
+      return
+    }
+
     const resolved: ResolvedItem[] = []
     for (const item of items) {
       resolved.push(await resolveBufferItem(item, aiConfig, instancia.token))
     }
 
-    const combinedText = resolved.map(r => r.texto).filter(Boolean).join('\n')
-    const images = resolved.flatMap(r => r.imagem ? [r.imagem] : [])
+    // Trava 3: tamanho da entrada e quantidade de imagens por chamada
+    const combinedText = resolved.map(r => r.texto).filter(Boolean).join('\n').slice(0, LIMITES.maxCaracteresEntrada)
+    const images = resolved.flatMap(r => r.imagem ? [r.imagem] : []).slice(0, LIMITES.maxImagensPorLote)
 
     const { data: historico } = await supabase
       .from('ai_conversas')
@@ -511,6 +631,18 @@ export async function processarLote(
 
     const history: ConversaMessage[] = ((historico ?? []) as ConversaMessage[]).reverse()
 
+    await sendComposing(fromJid, instancia.token)
+
+    const ai = await callAI(aiConfig, history, combinedText, images)
+    const aiResponse = ai.texto
+    console.log(`[ai-agent-core] AI response (${aiConfig.provedor}/${aiConfig.modelo}, ${ai.tokensEntrada}+${ai.tokensSaida} tokens): ${aiResponse.slice(0, 200)}`)
+    await supabase.rpc('ai_registrar_tokens', {
+      p_usuario_id: instancia.usuario_id,
+      p_entrada: ai.tokensEntrada,
+      p_saida: ai.tokensSaida,
+    })
+
+    // Grava a mensagem do contato só depois da IA responder (evita duplicar no histórico em caso de nova tentativa)
     await supabase.from('ai_conversas').insert({
       usuario_id: instancia.usuario_id,
       instancia_id: instancia.id,
@@ -518,11 +650,6 @@ export async function processarLote(
       role: 'user',
       mensagem: combinedText,
     })
-
-    await sendComposing(fromJid, instancia.token)
-
-    const aiResponse = await callAI(aiConfig, history, combinedText, images)
-    console.log(`[ai-agent-core] AI response (${aiConfig.provedor}): ${aiResponse.slice(0, 200)}`)
 
     const wantsHandoff = aiConfig.transferencia_ativa && aiResponse.includes(HANDOFF_MARKER)
     const respostaFinal = aiResponse.split(HANDOFF_MARKER).join('').trim()
@@ -567,9 +694,13 @@ export async function processarLote(
 
     console.log(`[ai-agent-core] ✅ respondido para ${fromPhone} (${parts.length} parte(s), ${items.length} msg(s) no lote)`)
   } catch (e) {
-    console.error(`[ai-agent-core] erro processando lote de ${fromPhone}, reinserindo no buffer para nova tentativa:`, e)
+    // Reinsere para nova tentativa, até LIMITES.maxTentativas (evita repetir para sempre, ex.: chave inválida)
+    const retentaveis = items
+      .map(item => ({ ...item, tentativas: (item.tentativas ?? 0) + 1 }))
+      .filter(item => item.tentativas < LIMITES.maxTentativas)
+    console.error(`[ai-agent-core] erro processando lote de ${fromPhone} — ${retentaveis.length}/${items.length} item(ns) reinserido(s) para nova tentativa:`, e)
     const retryToken = crypto.randomUUID()
-    for (const item of items) {
+    for (const item of retentaveis) {
       await appendToBuffer(supabase, instancia.id, fromPhone, item, retryToken)
     }
   }
@@ -611,13 +742,19 @@ export async function handleClaimedBuffer(
 
   const { data: aiConfigRow } = await supabase
     .from('ai_configuracoes')
-    .select('ativo, provedor, api_key, modelo, system_prompt, buffer_segundos, responder_audio, responder_imagem, openai_key_transcricao, restringir_horario, horario_inicio, horario_fim, dias_semana, mensagem_fora_horario, transferencia_ativa, transferencia_telefone')
+    .select('ativo, system_prompt, buffer_segundos, responder_audio, responder_imagem, restringir_horario, horario_inicio, horario_fim, dias_semana, mensagem_fora_horario, transferencia_ativa, transferencia_telefone, transferencia_destino')
     .eq('instancia_id', instanciaId)
     .maybeSingle()
-  if (!aiConfigRow?.ativo || !aiConfigRow?.api_key) return
+  if (!aiConfigRow?.ativo) return
 
-  if (aiConfigRow.restringir_horario && !isWithinBusinessHours(aiConfigRow)) {
-    await handleOutsideHours(supabase, { id: instancia.id, usuario_id: instancia.usuario_id, token: instancia.token }, toJid(numero), numero, aiConfigRow as AIConfig, items)
+  if (!aiGlobalConfigurada()) {
+    console.error('[ai-agent-core] segredo AI_OPENAI_API_KEY não configurado — agente não pode responder')
+    return
+  }
+  const aiConfig = aplicarConfigGlobal(aiConfigRow)
+
+  if (aiConfig.restringir_horario && !isWithinBusinessHours(aiConfig)) {
+    await handleOutsideHours(supabase, { id: instancia.id, usuario_id: instancia.usuario_id, token: instancia.token }, toJid(numero), numero, aiConfig, items)
     return
   }
 
@@ -626,7 +763,7 @@ export async function handleClaimedBuffer(
     { id: instancia.id, usuario_id: instancia.usuario_id, token: instancia.token },
     toJid(numero),
     numero,
-    aiConfigRow as AIConfig,
+    aiConfig,
     items,
   )
 }

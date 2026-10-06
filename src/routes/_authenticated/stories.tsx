@@ -12,6 +12,8 @@ import {
   RefreshCw, Users, Smartphone, Globe,
 } from "lucide-react";
 import { toast } from "sonner";
+import { MetricGrid, Metric } from "@/components/metric-grid";
+import { contarConectadas } from "@/lib/instance-status";
 
 export const Route = createFileRoute("/_authenticated/stories")({
   component: StoriesPage,
@@ -45,16 +47,17 @@ const CORES: { index: number; label: string; hex: string }[] = [
 ];
 
 const STATUS_CONFIG = {
-  pendente:  { label: "Agendado",  color: "bg-blue-100 text-blue-700",   icon: Clock },
-  enviando:  { label: "Enviando",  color: "bg-yellow-100 text-yellow-700", icon: Loader2 },
-  enviado:   { label: "Enviado",   color: "bg-green-100 text-green-700",  icon: CheckCircle2 },
-  erro:      { label: "Erro",      color: "bg-red-100 text-red-700",      icon: XCircle },
-  cancelado: { label: "Cancelado", color: "bg-gray-100 text-gray-600",    icon: XCircle },
+  pendente:  { label: "Agendado",  color: "bg-info-subtle text-info",   icon: Clock },
+  enviando:  { label: "Enviando",  color: "bg-warning-subtle text-warning", icon: Loader2 },
+  enviado:   { label: "Enviado",   color: "bg-success-subtle text-success",  icon: CheckCircle2 },
+  erro:      { label: "Erro",      color: "bg-danger-subtle text-danger",      icon: XCircle },
+  cancelado: { label: "Cancelado", color: "bg-muted text-muted-foreground",    icon: XCircle },
 };
 
 function StoriesPage() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [instancias, setInstancias] = useState<Instancia[]>([]);
+  const [conectadas, setConectadas] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalAberto, setModalAberto] = useState(false);
 
@@ -73,6 +76,7 @@ function StoriesPage() {
     setAgendamentos(((ags ?? []) as Agendamento[]));
     setInstancias(insts ?? []);
     setLoading(false);
+    contarConectadas(insts ?? []).then(setConectadas);
   };
 
   useEffect(() => { load(); }, []);
@@ -103,8 +107,8 @@ function StoriesPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Agendamento de Stories</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="text-2xl font-bold">Stories Marketing</h1>
+          <p className="text-sm text-muted-foreground">
             Programe a postagem automática de stories nos seus WhatsApps conectados.
           </p>
         </div>
@@ -113,24 +117,29 @@ function StoriesPage() {
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          { label: "Agendados",  value: agendamentos.filter((a) => a.status === "pendente").length,  color: "text-blue-600" },
-          { label: "Enviados",   value: agendamentos.filter((a) => a.status === "enviado").length,   color: "text-green-600" },
-          { label: "Com erro",   value: agendamentos.filter((a) => a.status === "erro").length,      color: "text-destructive" },
-          { label: "Instâncias", value: instancias.length,                                            color: "text-primary" },
-        ].map((s) => (
-          <Card key={s.label} className="p-4">
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-          </Card>
-        ))}
-      </div>
+      {/* Métricas */}
+      <MetricGrid>
+        <Metric label="Agendados"  value={agendamentos.filter((a) => a.status === "pendente").length} icon={Clock}        note="aguardando envio" />
+        <Metric label="Enviados"   value={agendamentos.filter((a) => a.status === "enviado").length}  icon={CheckCircle2} note="publicados" />
+        <Metric
+          label="Com erro"
+          value={agendamentos.filter((a) => a.status === "erro").length}
+          icon={XCircle}
+          note="falharam no envio"
+          tone={agendamentos.some((a) => a.status === "erro") ? "danger" : undefined}
+        />
+        <Metric
+          label="WhatsApp Conectados"
+          value={conectadas === null ? "—" : conectadas}
+          icon={Smartphone}
+          note={`de ${instancias.length} cadastrado${instancias.length === 1 ? "" : "s"}`}
+          tone={conectadas ? "brand" : undefined}
+        />
+      </MetricGrid>
 
       {/* Aviso sem instâncias */}
       {instancias.length === 0 && !loading && (
-        <div className="flex gap-3 bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+        <div className="flex gap-3 bg-warning-subtle border border-warning/30 rounded-lg p-4 text-sm text-warning">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           Nenhuma instância conectada. Configure em <span className="font-medium ml-1">Conexões</span>.
         </div>
@@ -139,36 +148,26 @@ function StoriesPage() {
       {/* Agendamentos pendentes */}
       {pendentes.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Próximos agendamentos
-          </h2>
-          {pendentes.map((a) => (
-            <AgendamentoCard
-              key={a.id}
-              ag={a}
-              instancias={instancias}
-              onCancelar={cancelar}
-              onExcluir={excluir}
-            />
-          ))}
+          <h2 className="font-semibold">Próximos agendamentos</h2>
+          <AgendamentosTabela
+            itens={pendentes}
+            instancias={instancias}
+            onCancelar={cancelar}
+            onExcluir={excluir}
+          />
         </div>
       )}
 
       {/* Histórico */}
       {historico.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Histórico
-          </h2>
-          {historico.map((a) => (
-            <AgendamentoCard
-              key={a.id}
-              ag={a}
-              instancias={instancias}
-              onCancelar={cancelar}
-              onExcluir={excluir}
-            />
-          ))}
+          <h2 className="font-semibold">Histórico</h2>
+          <AgendamentosTabela
+            itens={historico}
+            instancias={instancias}
+            onCancelar={cancelar}
+            onExcluir={excluir}
+          />
         </div>
       )}
 
@@ -195,77 +194,107 @@ function StoriesPage() {
   );
 }
 
-function AgendamentoCard({
-  ag, instancias, onCancelar, onExcluir,
+function AgendamentosTabela({
+  itens, instancias, onCancelar, onExcluir,
 }: {
-  ag: Agendamento;
+  itens: Agendamento[];
   instancias: Instancia[];
   onCancelar: (id: string) => void;
   onExcluir: (id: string) => void;
 }) {
-  const cfg = STATUS_CONFIG[ag.status];
-  const StatusIcon = cfg.icon;
-  const nomesInst = ag.instancias_ids
-    .map((id) => instancias.find((i) => i.id === id)?.nome ?? id.slice(0, 8))
-    .join(", ");
-
-  const tipoIcon = ag.tipo === "image" ? Image : ag.tipo === "video" ? Video : Type;
-  const TipoIcon = tipoIcon;
-
   return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3 min-w-0 flex-1">
-          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <TipoIcon className="w-4 h-4 text-primary" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-sm">{ag.titulo}</span>
-              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${cfg.color}`}>
-                <StatusIcon className={`w-3 h-3 ${ag.status === "enviando" ? "animate-spin" : ""}`} />
-                {cfg.label}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <CalendarClock className="w-3 h-3" />
-                {new Date(ag.agendado_para).toLocaleString("pt-BR", {
-                  day: "2-digit", month: "2-digit", year: "numeric",
-                  hour: "2-digit", minute: "2-digit",
-                })}
-              </span>
-              {nomesInst && (
-                <span className="text-xs text-muted-foreground">
-                  📱 {nomesInst}
-                </span>
-              )}
-            </div>
-            {ag.tipo === "text" && ag.texto && (
-              <p className="text-xs text-muted-foreground mt-1 truncate max-w-md italic">"{ag.texto}"</p>
-            )}
-            {ag.resultado && ag.status === "erro" && (
-              <p className="text-xs text-destructive mt-1">
-                {JSON.stringify(ag.resultado).slice(0, 120)}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {ag.status === "pendente" && (
-            <Button variant="ghost" size="sm" onClick={() => onCancelar(ag.id)} className="text-muted-foreground hover:text-yellow-600">
-              <XCircle className="w-4 h-4" />
-            </Button>
-          )}
-          {["enviado","erro","cancelado"].includes(ag.status) && (
-            <Button variant="ghost" size="sm" onClick={() => onExcluir(ag.id)} className="text-muted-foreground hover:text-destructive">
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          )}
-        </div>
+    <Card className="p-0 overflow-hidden">
+      <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[560px]">
+        <thead className="text-left text-muted-foreground border-b">
+          <tr>
+            <th className="px-4 sm:px-6 py-3">Título</th>
+            <th className="py-3">Status</th>
+            <th className="py-3">Agendado para</th>
+            <th className="py-3 hidden md:table-cell">Instâncias</th>
+            <th className="text-right px-4 sm:px-6 py-3">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {itens.map((ag) => {
+            const cfg = STATUS_CONFIG[ag.status];
+            const StatusIcon = cfg.icon;
+            const TipoIcon = ag.tipo === "image" ? Image : ag.tipo === "video" ? Video : Type;
+            const nomesInst = ag.instancias_ids
+              .map((id) => instancias.find((i) => i.id === id)?.nome ?? id.slice(0, 8))
+              .join(", ");
+            return (
+              <tr key={ag.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                <td className="px-4 sm:px-6 py-3 max-w-[260px]">
+                  <div className="font-medium flex items-center gap-2 truncate">
+                    <TipoIcon className="w-4 h-4 text-brand shrink-0" />
+                    <span className="truncate">{ag.titulo}</span>
+                  </div>
+                  {ag.resultado && ag.status === "erro" ? (
+                    <p className="text-xs text-danger mt-0.5 truncate" title={JSON.stringify(ag.resultado)}>
+                      {JSON.stringify(ag.resultado).slice(0, 120)}
+                    </p>
+                  ) : ag.tipo === "text" && ag.texto ? (
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate italic">"{ag.texto}"</p>
+                  ) : null}
+                </td>
+                <td className="py-3">
+                  <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${cfg.color}`}>
+                    <StatusIcon className={`w-3 h-3 ${ag.status === "enviando" ? "animate-spin" : ""}`} />
+                    {cfg.label}
+                  </span>
+                </td>
+                <td className="py-3 whitespace-nowrap">
+                  {new Date(ag.agendado_para).toLocaleString("pt-BR", {
+                    day: "2-digit", month: "2-digit", year: "numeric",
+                    hour: "2-digit", minute: "2-digit",
+                  })}
+                </td>
+                <td className="py-3 hidden md:table-cell max-w-[220px]">
+                  <span className="text-muted-foreground truncate block" title={nomesInst}>{nomesInst || "—"}</span>
+                </td>
+                <td className="px-4 sm:px-6 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    {ag.status === "pendente" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-warning"
+                        onClick={() => onCancelar(ag.id)}
+                        title="Cancelar agendamento"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </Button>
+                    )}
+                    {["enviado", "erro", "cancelado"].includes(ag.status) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => onExcluir(ag.id)}
+                        title="Excluir agendamento"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
       </div>
     </Card>
   );
+}
+
+// ID da mensagem devolvido pela UAZAPI em /send/status (ex.: { Id: "3EB0..." }); "PHONE:HEX" vira "HEX".
+function extrairMensagemId(resp: unknown): string | null {
+  const d = resp as Record<string, any> | null;
+  const raw = d?.Id ?? d?.id ?? d?.key?.id ?? d?.messageid ?? d?.messageId;
+  if (!raw || typeof raw !== "string") return null;
+  return raw.includes(":") ? (raw.split(":").pop() ?? raw) : raw;
 }
 
 function formatarNumeroWhatsapp(phone: string): string {
@@ -544,7 +573,22 @@ function NovoAgendamentoModal({
             response: data
           },
         };
-        await (supabase as any).from("stories_agendamentos").insert(row);
+        const { data: agRow } = await (supabase as any)
+          .from("stories_agendamentos")
+          .insert(row)
+          .select("id")
+          .single();
+        // Registra o envio para o webhook contar as visualizações (falha aqui não afeta a publicação)
+        const mensagemId = extrairMensagemId(data);
+        if (agRow?.id && mensagemId) {
+          const { error: envioErr } = await (supabase as any).from("stories_envios").insert({
+            agendamento_id: agRow.id,
+            usuario_id: u.user.id,
+            instancia_id: inst.id,
+            mensagem_id: mensagemId,
+          });
+          if (envioErr) console.error("Erro ao registrar envio do story:", envioErr.message);
+        }
       }
 
       if (totalDest > 0) {
@@ -566,7 +610,7 @@ function NovoAgendamentoModal({
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Clapperboard className="w-5 h-5 text-primary" /> Novo Agendamento de Story
+            <Clapperboard className="w-5 h-5 text-brand" /> Novo Agendamento de Story
           </DialogTitle>
         </DialogHeader>
 
@@ -591,7 +635,7 @@ function NovoAgendamentoModal({
                   onClick={() => setTipo(value)}
                   className={`flex items-center gap-2 p-3 rounded-lg border text-sm font-medium transition-colors ${
                     tipo === value
-                      ? "border-primary bg-primary/5 text-primary"
+                      ? "border-primary bg-primary/5 text-brand"
                       : "border-border hover:bg-muted/30 text-muted-foreground"
                   }`}
                 >
@@ -640,7 +684,7 @@ function NovoAgendamentoModal({
                       key={f}
                       onClick={() => setFont(f)}
                       className={`px-3 py-1.5 rounded border text-xs transition-colors ${
-                        font === f ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:bg-muted/30"
+                        font === f ? "border-primary bg-primary/5 text-brand" : "border-border text-muted-foreground hover:bg-muted/30"
                       }`}
                     >
                       Fonte {f}
@@ -755,7 +799,7 @@ function NovoAgendamentoModal({
           <div className="space-y-3 border rounded-lg p-4 bg-muted/20">
             <div>
               <label className="text-sm font-semibold flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-primary" /> Visibilidade do Story (Quem vai ver)
+                <Users className="w-4 h-4 text-brand" /> Visibilidade do Story (Quem vai ver)
               </label>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Para que o status seja entregue a outras pessoas, o WhatsApp requer a lista de contatos autorizados.
@@ -768,12 +812,12 @@ function NovoAgendamentoModal({
                 onClick={() => setPublicoAlvo("whatsapp")}
                 className={`flex flex-col items-start p-2.5 rounded-lg border text-left text-xs transition-colors ${
                   publicoAlvo === "whatsapp"
-                    ? "border-primary bg-primary/10 text-primary font-medium shadow-sm"
+                    ? "border-primary bg-primary/10 text-brand font-medium shadow-sm"
                     : "border-border hover:bg-muted/40 text-muted-foreground"
                 }`}
               >
                 <span className="flex items-center gap-1.5 font-medium text-foreground">
-                  <Smartphone className="w-3.5 h-3.5 text-primary" /> Agenda do WhatsApp
+                  <Smartphone className="w-3.5 h-3.5 text-brand" /> Agenda do WhatsApp
                 </span>
                 <span className="text-[11px] text-muted-foreground mt-1">
                   Todos os contatos salvos no WhatsApp do aparelho (Recomendado).
@@ -785,15 +829,15 @@ function NovoAgendamentoModal({
                 onClick={() => setPublicoAlvo("leads")}
                 className={`flex flex-col items-start p-2.5 rounded-lg border text-left text-xs transition-colors ${
                   publicoAlvo === "leads"
-                    ? "border-primary bg-primary/10 text-primary font-medium shadow-sm"
+                    ? "border-primary bg-primary/10 text-brand font-medium shadow-sm"
                     : "border-border hover:bg-muted/40 text-muted-foreground"
                 }`}
               >
                 <span className="flex items-center gap-1.5 font-medium text-foreground">
-                  <Users className="w-3.5 h-3.5 text-primary" /> Leads do Sistema
+                  <Users className="w-3.5 h-3.5 text-brand" /> Leads do Sistema
                 </span>
                 <span className="text-[11px] text-muted-foreground mt-1">
-                  Contatos cadastrados na aba Leads do Chama AI.
+                  Contatos cadastrados na Carteira de Leads do Prospecta 360.
                 </span>
               </button>
 
@@ -802,12 +846,12 @@ function NovoAgendamentoModal({
                 onClick={() => setPublicoAlvo("ambos")}
                 className={`flex flex-col items-start p-2.5 rounded-lg border text-left text-xs transition-colors ${
                   publicoAlvo === "ambos"
-                    ? "border-primary bg-primary/10 text-primary font-medium shadow-sm"
+                    ? "border-primary bg-primary/10 text-brand font-medium shadow-sm"
                     : "border-border hover:bg-muted/40 text-muted-foreground"
                 }`}
               >
                 <span className="flex items-center gap-1.5 font-medium text-foreground">
-                  <Globe className="w-3.5 h-3.5 text-primary" /> Ambos
+                  <Globe className="w-3.5 h-3.5 text-brand" /> Ambos
                 </span>
                 <span className="text-[11px] text-muted-foreground mt-1">
                   Junta agenda do WhatsApp + leads do sistema.
@@ -823,7 +867,7 @@ function NovoAgendamentoModal({
                   size="sm"
                   onClick={() => carregarContatosWhatsApp()}
                   disabled={carregandoContatos || instSelecionadas.size === 0}
-                  className="gap-2 shrink-0 h-8 text-xs border-primary/40 text-primary hover:bg-primary/5 font-medium"
+                  className="gap-2 shrink-0 h-8 text-xs border-primary/40 text-brand hover:bg-primary/5 font-medium"
                 >
                   {carregandoContatos ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -896,7 +940,7 @@ function NovoAgendamentoModal({
                       onClick={() => setRecorrencia(r)}
                       className={`px-3 py-1.5 rounded border text-xs font-medium transition-colors ${
                         recorrencia === r
-                          ? "border-primary bg-primary/5 text-primary"
+                          ? "border-primary bg-primary/5 text-brand"
                           : "border-border text-muted-foreground hover:bg-muted/30"
                       }`}
                     >
@@ -915,7 +959,7 @@ function NovoAgendamentoModal({
             variant="outline"
             onClick={testarAgora}
             disabled={testando || salvando}
-            className="gap-2 border-primary/40 text-primary hover:bg-primary/5"
+            className="gap-2 border-primary/40 text-brand hover:bg-primary/5"
             title="Publica imediatamente no WhatsApp para todos os contatos carregados"
           >
             {testando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

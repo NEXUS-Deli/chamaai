@@ -199,19 +199,19 @@ function NovaEmailCampanha() {
     <div className="p-8 w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Nova Campanha de E-mail</h1>
-        <p className="text-sm text-muted-foreground mt-1">Configure e dispare sua campanha de e-mail marketing</p>
+        <p className="text-sm text-muted-foreground">Configure e dispare sua campanha de e-mail marketing</p>
       </div>
 
       {/* Credencial */}
       <Card className="p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2">
-          <Mail className="w-4 h-4 text-primary" />
+          <Mail className="w-4 h-4 text-brand" />
           Credencial de Envio
         </h2>
         {credentials.length === 0 ? (
           <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-4">
             Nenhuma credencial SMTP configurada. Acesse{" "}
-            <a href="/configuracoes" className="text-primary underline">
+            <a href="/configuracoes" className="text-brand underline">
               Conexões
             </a>{" "}
             e adicione uma credencial de e-mail primeiro.
@@ -248,7 +248,7 @@ function NovaEmailCampanha() {
       {/* Template + Conteúdo */}
       <Card className="p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2">
-          <FileText className="w-4 h-4 text-primary" />
+          <FileText className="w-4 h-4 text-brand" />
           Conteúdo do E-mail
         </h2>
 
@@ -295,7 +295,7 @@ function NovaEmailCampanha() {
         {conteudoHtml && (
           <div>
             <button
-              className="flex items-center gap-1 text-xs text-primary font-medium"
+              className="flex items-center gap-1 text-xs text-brand font-medium"
               onClick={() => setShowPreview(!showPreview)}
             >
               {showPreview ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -314,7 +314,7 @@ function NovaEmailCampanha() {
       {/* Contatos */}
       <Card className="p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2">
-          <Users className="w-4 h-4 text-primary" />
+          <Users className="w-4 h-4 text-brand" />
           Contatos ({contatos.length} carregados)
         </h2>
 
@@ -343,7 +343,7 @@ function NovaEmailCampanha() {
         </div>
 
         {contatos.length > 0 && (
-          <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-lg">
+          <div className="flex items-center gap-2 text-sm text-success  bg-success-subtle  px-3 py-2 rounded-lg">
             <Users className="w-4 h-4" />
             <span className="font-medium">{contatos.length} e-mails prontos para envio</span>
             <button onClick={() => { setContatos([]); setCsvText(""); }}>
@@ -356,7 +356,7 @@ function NovaEmailCampanha() {
       {/* Configurações de disparo */}
       <Card className="p-5 space-y-4">
         <h2 className="font-semibold flex items-center gap-2">
-          <Clock className="w-4 h-4 text-primary" />
+          <Clock className="w-4 h-4 text-brand" />
           Configurações de Disparo
         </h2>
 

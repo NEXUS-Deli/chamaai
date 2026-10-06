@@ -8,10 +8,10 @@ export interface ConnectionLimitResult {
 }
 
 /**
- * Verifica se o usuário pode adicionar mais uma conexão WhatsApp.
+ * Verifica se o usuário pode adicionar mais uma conexão (WhatsApp ou e-mail).
  *
  * 1. Busca o plano ativo em user_plans com o max_connections do plano referenciado.
- * 2. Conta quantas instâncias o usuário já tem na tabela instancias.
+ * 2. Conta instâncias de WhatsApp (instancias) + credenciais de e-mail (email_credentials).
  * 3. Retorna { allowed, current, limit, planName }.
  *
  * Lança erro claro se o usuário não tiver plano ativo.
@@ -31,15 +31,16 @@ export async function canAddConnection(userId: string): Promise<ConnectionLimitR
   const plan = userPlan.plans as { name: string; max_connections: number } | null;
   if (!plan) throw new Error("Usuário sem plano ativo");
 
-  // Conta conexões existentes do usuário
-  const { count, error: countError } = await supabase
-    .from("instancias")
-    .select("id", { count: "exact", head: true })
-    .eq("usuario_id", userId);
+  // Conta conexões existentes do usuário: WhatsApp + e-mail
+  const [whats, email] = await Promise.all([
+    supabase.from("instancias").select("id", { count: "exact", head: true }).eq("usuario_id", userId),
+    supabase.from("email_credentials").select("id", { count: "exact", head: true }).eq("usuario_id", userId),
+  ]);
 
+  const countError = whats.error ?? email.error;
   if (countError) throw new Error("Erro ao verificar conexões: " + countError.message);
 
-  const current = count ?? 0;
+  const current = (whats.count ?? 0) + (email.count ?? 0);
 
   return {
     allowed: current < plan.max_connections,

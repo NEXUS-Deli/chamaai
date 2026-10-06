@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Users, Loader2, ChevronRight, ArrowDownToLine, CheckCircle2, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { FerramentasNav } from "@/components/ferramentas-nav";
+import { FerramentasHeader } from "@/components/ferramentas-nav";
 
 export const Route = createFileRoute("/_authenticated/ferramentas/extrator")({
   component: Extrator,
@@ -162,21 +162,14 @@ function Extrator() {
 
   return (
     <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Extrator de Grupos</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Faça a extração de leads dos grupos do WhatsApp com a Chama AI.
-        </p>
-      </div>
-
-      <FerramentasNav active="extrator" />
+      <FerramentasHeader active="extrator" />
 
       <Card className="p-6 space-y-5">
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Instância WhatsApp</label>
             {instancias.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma instância. Configure em <span className="text-primary">Conexões</span>.</p>
+              <p className="text-sm text-muted-foreground">Nenhuma instância. Configure em <span className="text-brand">Conexões</span>.</p>
             ) : (
               <Select value={instanciaId} onValueChange={setInstanciaId}>
                 <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
@@ -264,7 +257,7 @@ function Extrator() {
                   <>
                     {/* Selecionar todos */}
                     <div className="flex items-center gap-3 py-1">
-                      <button onClick={toggleTodos} className="text-xs text-primary underline">
+                      <button onClick={toggleTodos} className="text-xs text-brand underline">
                         {selecionados.size === membros.length ? "Desmarcar todos" : "Selecionar todos"}
                       </button>
                       <span className="text-xs text-muted-foreground">{selecionados.size} de {membros.length}</span>
@@ -297,7 +290,7 @@ function Extrator() {
                             </div>
                             {m.admin && (
                               <span title="Admin">
-                                <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" />
+                                <ShieldCheck className="w-3.5 h-3.5 text-brand shrink-0" />
                               </span>
                             )}
                           </label>
@@ -324,9 +317,9 @@ function Extrator() {
       )}
 
       {salvados > 0 && (
-        <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-2 text-sm text-success bg-success-subtle border border-success/30 rounded-lg px-4 py-3">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
-          {salvados} membros salvos como leads na Chama AI.
+          {salvados} membros salvos como leads no Prospecta 360.
         </div>
       )}
     </div>

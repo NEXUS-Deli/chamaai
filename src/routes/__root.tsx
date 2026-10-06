@@ -66,7 +66,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           </button>
           <a
             href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-sunken"
           >
             Go home
           </a>
@@ -76,23 +76,34 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+declare const __SITE_URL__: string;
+// URL absoluta da imagem de prévia (WhatsApp, Facebook etc. exigem endereço completo)
+const OG_IMAGE = `${typeof __SITE_URL__ !== "undefined" ? __SITE_URL__ : ""}/og-image.png`;
+
+const DESCRICAO =
+  "Prospecta 360: disparos de WhatsApp e e-mail marketing, stories e gestão de leads em um só lugar.";
+
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "aosdasd" },
-      { name: "description", content: "ASas" },
-      { property: "og:title", content: "aosdasd" },
-      { property: "og:description", content: "ASas" },
+      { title: "Prospecta 360" },
+      { name: "description", content: DESCRICAO },
+      { property: "og:title", content: "Prospecta 360" },
+      { property: "og:description", content: DESCRICAO },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "aosdasd" },
-      { name: "twitter:description", content: "ASas" },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/de655b06-6e4f-4106-b7ad-de29427d9eab/id-preview-dca260aa--509e582f-c748-43d1-90ba-7da9d92584e3.lovable.app-1781033270295.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/de655b06-6e4f-4106-b7ad-de29427d9eab/id-preview-dca260aa--509e582f-c748-43d1-90ba-7da9d92584e3.lovable.app-1781033270295.png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Prospecta 360" },
+      { name: "twitter:description", content: DESCRICAO },
+      { property: "og:image", content: OG_IMAGE },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { name: "twitter:image", content: OG_IMAGE },
     ],
     links: [
+      { rel: "icon", type: "image/png", href: "/prospecta360-icon.png" },
+      { rel: "apple-touch-icon", href: "/prospecta360-icon.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {

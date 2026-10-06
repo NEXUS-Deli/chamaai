@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
+import { MetricGrid, Metric } from "@/components/metric-grid";
 import {
   Plus, Pencil, Trash2, FileText, Loader2, Copy, Upload, Layers, AlertCircle,
   Image as ImageIcon, Video, Music, FileIcon,
@@ -83,16 +84,38 @@ function formatarTamanho(bytes: number | null): string {
 
 function TemplatesPage() {
   const [tab, setTab] = useState<"mensagens" | "midias">("mensagens");
+  const [contagem, setContagem] = useState<{ mensagens: number; midias: number } | null>(null);
+
+  const carregarContagem = async () => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const [msgs, mids] = await Promise.all([
+      (supabase as any).from("message_templates").select("id", { count: "exact", head: true }).eq("usuario_id", u.user.id),
+      (supabase as any).from("media_templates").select("id", { count: "exact", head: true }).eq("usuario_id", u.user.id),
+    ]);
+    setContagem({ mensagens: msgs.count ?? 0, midias: mids.count ?? 0 });
+  };
+
+  useEffect(() => { carregarContagem(); }, []);
 
   return (
     <div className="p-4 sm:p-8 space-y-6">
-      {/* Header + Tabs */}
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Templates</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-muted-foreground">
           Salve mensagens e mídias para usar nas suas campanhas com um clique.
         </p>
-        <div className="flex gap-1 mt-4 bg-muted/50 rounded-lg p-1 w-fit">
+      </div>
+
+      <MetricGrid cols={2}>
+        <Metric label="Templates de mensagens" value={contagem?.mensagens ?? "—"} icon={FileText}  note="mensagens salvas" />
+        <Metric label="Mídias carregadas"      value={contagem?.midias ?? "—"}    icon={ImageIcon} note="imagens, vídeos, áudios e documentos" />
+      </MetricGrid>
+
+      {/* Tabs */}
+      <div>
+        <div className="flex gap-1 bg-muted/50 rounded-lg p-1 w-fit">
           <button
             onClick={() => setTab("mensagens")}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -118,15 +141,15 @@ function TemplatesPage() {
         </div>
       </div>
 
-      {tab === "mensagens" && <MensagensTab />}
-      {tab === "midias" && <MidiasTab />}
+      {tab === "mensagens" && <MensagensTab onChange={carregarContagem} />}
+      {tab === "midias" && <MidiasTab onChange={carregarContagem} />}
     </div>
   );
 }
 
 // ── Mensagens Tab ──────────────────────────────────────────────────────────────
 
-function MensagensTab() {
+function MensagensTab({ onChange }: { onChange?: () => void }) {
   const [templates, setTemplates] = useState<TextTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ open: boolean; item: TextTemplate | null }>({ open: false, item: null });
@@ -142,6 +165,7 @@ function MensagensTab() {
       .order("atualizado_em", { ascending: false });
     setTemplates(((data ?? []) as TextTemplate[]).map((t) => ({ ...t, variacoes: t.variacoes ?? [] })));
     setLoading(false);
+    onChange?.();
   };
 
   useEffect(() => { load(); }, []);
@@ -187,16 +211,16 @@ function MensagensTab() {
           {packs.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-primary" />
+                <Layers className="w-4 h-4 text-brand" />
                 <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Packs de variações</h2>
-                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{packs.length}</span>
+                <span className="text-xs bg-primary/10 text-brand px-2 py-0.5 rounded-full font-medium">{packs.length}</span>
               </div>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {packs.map((t) => (
                   <Card key={t.id} className="p-5 flex flex-col gap-3 hover:shadow-md transition-shadow border-primary/20">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <Layers className="w-4 h-4 text-primary shrink-0" />
+                        <Layers className="w-4 h-4 text-brand shrink-0" />
                         <h3 className="font-semibold text-sm truncate">{t.nome}</h3>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -206,7 +230,7 @@ function MensagensTab() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-brand text-xs font-semibold">
                         <Layers className="w-3 h-3" /> {t.variacoes.length} mensagens
                       </span>
                     </div>
@@ -274,7 +298,7 @@ function MensagensTab() {
 
 // ── Mídias Tab ─────────────────────────────────────────────────────────────────
 
-function MidiasTab() {
+function MidiasTab({ onChange }: { onChange?: () => void }) {
   const [midias, setMidias] = useState<MediaTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -292,6 +316,7 @@ function MidiasTab() {
       .order("criado_em", { ascending: false });
     setMidias((data ?? []) as MediaTemplate[]);
     setLoading(false);
+    onChange?.();
   };
 
   useEffect(() => { load(); }, []);
@@ -411,7 +436,7 @@ function MidiasTab() {
       >
         {uploading ? (
           <div className="flex flex-col items-center gap-3 text-muted-foreground">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <Loader2 className="w-8 h-8 animate-spin text-brand" />
             <p className="text-sm">Fazendo upload...</p>
           </div>
         ) : (
@@ -495,10 +520,10 @@ function MidiasTab() {
                     </button>
                     <button
                       onClick={() => excluir(m)}
-                      className="p-2 bg-red-500/70 hover:bg-red-500/90 rounded-lg transition-colors"
+                      className="p-2 bg-danger/70 hover:bg-danger/90 rounded-lg transition-colors"
                       title="Excluir"
                     >
-                      <Trash2 className="w-4 h-4 text-white" />
+                      <Trash2 className="w-4 h-4 text-destructive-foreground" />
                     </button>
                   </div>
                   {/* Type badge */}
@@ -711,12 +736,12 @@ function PackImportModal({ open, onClose, onSalvo }: { open: boolean; onClose: (
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-primary" /> Importar pack de mensagens
+            <Layers className="w-5 h-5 text-brand" /> Importar pack de mensagens
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-5 py-2">
-          <div className="flex gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-800 dark:text-blue-200">
+          <div className="flex gap-3 bg-info-subtle  border border-info/30  rounded-lg p-3 text-sm text-info ">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <p className="font-medium">Formato do arquivo:</p>
@@ -738,7 +763,7 @@ function PackImportModal({ open, onClose, onSalvo }: { open: boolean; onClose: (
           >
             {mensagens.length > 0 ? (
               <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-brand text-sm font-semibold">
                   <Layers className="w-4 h-4" /> {mensagens.length} mensagem(ns) carregada(s)
                 </div>
                 <div className="mt-3 space-y-1.5 max-h-36 overflow-y-auto text-left">
